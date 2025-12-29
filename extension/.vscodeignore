@@ -1,0 +1,10 @@
+node_modules/**
+openspec/**
+src/**
+tsconfig.json
+**/*.map
+**/.DS_Store
+.vscode/**
+.git/**
+.gitignore
+AGENTS.md
