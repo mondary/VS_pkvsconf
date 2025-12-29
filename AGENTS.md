@@ -16,3 +16,16 @@ Use `@/openspec/AGENTS.md` to learn:
 Keep this managed block so 'openspec update' can refresh the instructions.
 
 <!-- OPENSPEC:END -->
+
+## Project Structure Preference
+
+Use the current layout as the preferred project structure:
+
+```
+.
+├─ extension/   # VS Code extension source, build output, and scripts
+├─ openspec/    # OpenSpec specs and changes
+├─ releases/    # Generated .vsix packages
+├─ README.md
+└─ .gitignore
+```

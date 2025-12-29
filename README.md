@@ -4,7 +4,7 @@ Extension VS Code qui ajoute un bouton dans la barre de titre de l'Explorer pour
 
 ## Arborescence
 
-- `extension/` : code de l'extension
+- `extension/` : code de l'extension, build, scripts
 - `openspec/` : specs OpenSpec
 - `releases/` : packages .vsix generes
 
