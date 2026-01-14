@@ -251,11 +251,6 @@ interface GitExtension {
 
 type ExtensionTagsMap = Record<string, string[]>;
 
-type ExtensionTagNode =
-  | { type: "tag"; tag: string }
-  | { type: "extension"; tag: string; extension: vscode.Extension<any> }
-  | { type: "allExtension"; extension: vscode.Extension<any> };
-
 class ExtensionTagsStore {
   constructor(private context: vscode.ExtensionContext) {}
 
@@ -313,199 +308,311 @@ const CATEGORY_COLORS_HEX = [
   "#70c0ff"  // Bleu clair
 ];
 
-function createColoredCircleSvg(color: string): string {
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="${color}"/></svg>`;
-}
-
-function getCategoryIconUri(categoryName: string, allCategories: string[]): vscode.Uri {
+function getCategoryColor(categoryName: string, allCategories: string[]): string {
   const index = allCategories.indexOf(categoryName);
-  const color = CATEGORY_COLORS_HEX[index % CATEGORY_COLORS_HEX.length];
-  const svg = createColoredCircleSvg(color);
-  const encoded = Buffer.from(svg).toString("base64");
-  return vscode.Uri.parse(`data:image/svg+xml;base64,${encoded}`);
+  return CATEGORY_COLORS_HEX[index % CATEGORY_COLORS_HEX.length];
 }
 
-class ExtensionTagsViewProvider
-  implements vscode.TreeDataProvider<ExtensionTagNode>
-{
-  private readonly emitter = new vscode.EventEmitter<
-    ExtensionTagNode | void
-  >();
-  readonly onDidChangeTreeData = this.emitter.event;
+interface ExtensionInfo {
+  id: string;
+  name: string;
+  iconPath: string | undefined;
+}
 
-  constructor(private store: ExtensionTagsStore) {}
+class ExtensionCategoriesWebviewProvider implements vscode.WebviewViewProvider {
+  private view: vscode.WebviewView | undefined;
+  private collapsedCategories: Set<string> = new Set();
+
+  constructor(
+    private store: ExtensionTagsStore,
+    private extensionUri: vscode.Uri
+  ) {}
 
   refresh(): void {
-    this.emitter.fire();
+    if (this.view) {
+      this.render();
+    }
   }
 
-  getTreeItem(element: ExtensionTagNode): vscode.TreeItem {
-    if (element.type === "tag") {
-      // Compter les extensions dans ce tag
-      const allExtensions = vscode.extensions.all.filter(
-        (ext) => !ext.id.startsWith("vscode.")
-      );
-      let count: number;
+  resolveWebviewView(webviewView: vscode.WebviewView): void {
+    this.view = webviewView;
 
-      if (element.tag === "— Sans tag —") {
-        const extensionsWithTags = new Set(Object.keys(this.store.getAll()));
-        count = allExtensions.filter((ext) => !extensionsWithTags.has(ext.id)).length;
-      } else {
-        const tagsMap = this.store.getAll();
-        count = Object.entries(tagsMap).filter(([, tags]) =>
-          tags.includes(element.tag)
-        ).length;
-      }
-
-      const item = new vscode.TreeItem(
-        element.tag,
-        vscode.TreeItemCollapsibleState.Expanded
-      );
-      item.description = `(${count})`;
-
-      if (element.tag === "— Sans tag —") {
-        item.iconPath = new vscode.ThemeIcon("question");
-      } else {
-        const allCategories = this.store.getAllTagNames();
-        item.iconPath = getCategoryIconUri(element.tag, allCategories);
-      }
-
-      item.contextValue = "extensionTagGroup";
-      return item;
-    }
-
-    if (element.type === "allExtension") {
-      const label =
-        element.extension.packageJSON.displayName ??
-        element.extension.packageJSON.name ??
-        element.extension.id;
-      const tags = this.store.getTagsForExtension(element.extension.id);
-      const item = new vscode.TreeItem(
-        label,
-        vscode.TreeItemCollapsibleState.None
-      );
-      item.description = tags.length > 0 ? tags[0] : "";
-
-      // Utiliser le vrai logo de l'extension si disponible
-      const extensionIcon = element.extension.packageJSON.icon;
-      item.iconPath = extensionIcon
-        ? vscode.Uri.file(path.join(element.extension.extensionPath, extensionIcon))
-        : new vscode.ThemeIcon("extensions");
-      item.command = {
-        command: "workbench.extensions.action.showExtensionsWithIds",
-        title: "Show Extension",
-        arguments: [[element.extension.id]]
-      };
-      item.contextValue = "extensionListItem";
-      item.tooltip = `${element.extension.id}${tags.length > 0 ? `\nCatégorie: ${tags[0]}` : ""}`;
-      return item;
-    }
-
-    const label =
-      element.extension.packageJSON.displayName ??
-      element.extension.packageJSON.name ??
-      element.extension.id;
-    const item = new vscode.TreeItem(
-      label,
-      vscode.TreeItemCollapsibleState.None
-    );
-    item.description = element.extension.id;
-
-    // Utiliser le vrai logo de l'extension si disponible
-    const extIcon = element.extension.packageJSON.icon;
-    item.iconPath = extIcon
-      ? vscode.Uri.file(path.join(element.extension.extensionPath, extIcon))
-      : new vscode.ThemeIcon("extensions");
-    item.command = {
-      command: "workbench.extensions.action.showExtensionsWithIds",
-      title: "Show Extension",
-      arguments: [[element.extension.id]]
+    webviewView.webview.options = {
+      enableScripts: true,
+      localResourceRoots: [
+        this.extensionUri,
+        ...vscode.extensions.all.map(ext => vscode.Uri.file(ext.extensionPath))
+      ]
     };
-    item.contextValue = "extensionTagItem";
-    return item;
+
+    webviewView.webview.onDidReceiveMessage((message) => {
+      switch (message.command) {
+        case "toggleCategory":
+          if (this.collapsedCategories.has(message.category)) {
+            this.collapsedCategories.delete(message.category);
+          } else {
+            this.collapsedCategories.add(message.category);
+          }
+          this.render();
+          break;
+        case "openExtension":
+          vscode.commands.executeCommand(
+            "workbench.extensions.action.showExtensionsWithIds",
+            [message.extensionId]
+          );
+          break;
+        case "setCategory":
+          this.handleSetCategory(message.extensionId);
+          break;
+      }
+    });
+
+    this.render();
   }
 
-  getChildren(element?: ExtensionTagNode): ExtensionTagNode[] {
+  private async handleSetCategory(extensionId: string): Promise<void> {
+    const extension = vscode.extensions.all.find(ext => ext.id === extensionId);
+    if (!extension) return;
+
+    const existingCategories = this.store.getAllTagNames();
+    const currentCategory = this.store.getTagsForExtension(extensionId)[0];
+
+    interface CategoryPickItem extends vscode.QuickPickItem {
+      action?: "new" | "none";
+    }
+
+    const items: CategoryPickItem[] = [
+      { label: "$(add) Nouvelle catégorie...", action: "new" },
+      { label: "$(close) Aucune catégorie", action: "none" },
+      ...existingCategories.map((cat) => ({
+        label: cat,
+        description: cat === currentCategory ? "✓ actuelle" : undefined
+      }))
+    ];
+
+    const selection = await vscode.window.showQuickPick(items, {
+      placeHolder: currentCategory
+        ? `Catégorie actuelle : ${currentCategory}`
+        : "Choisir une catégorie"
+    });
+
+    if (!selection) return;
+
+    if (selection.action === "none") {
+      await this.store.setTagsForExtension(extensionId, []);
+    } else if (selection.action === "new") {
+      const newCategory = await vscode.window.showInputBox({
+        prompt: "Nom de la nouvelle catégorie",
+        placeHolder: "AI, Theme, Language..."
+      });
+      if (newCategory && newCategory.trim()) {
+        await this.store.setTagsForExtension(extensionId, [newCategory.trim()]);
+      }
+    } else {
+      await this.store.setTagsForExtension(extensionId, [selection.label]);
+    }
+
+    this.refresh();
+  }
+
+  private getExtensionsByCategory(): Map<string, ExtensionInfo[]> {
     const allExtensions = vscode.extensions.all.filter(
       (ext) => !ext.id.startsWith("vscode.")
     );
+    const tagsMap = this.store.getAll();
+    const categories = new Map<string, ExtensionInfo[]>();
 
-    if (!element) {
-      // Niveau racine : afficher les tags + une section "Sans tag"
-      const tagNames = this.store.getAllTagNames();
-      const tagNodes: ExtensionTagNode[] = tagNames.map((tag) => ({
-        type: "tag" as const,
-        tag
-      }));
-
-      // Trouver les extensions sans tag
-      const extensionsWithTags = new Set(
-        Object.keys(this.store.getAll())
-      );
-      const untaggedExtensions = allExtensions.filter(
-        (ext) => !extensionsWithTags.has(ext.id)
-      );
-
-      // Ajouter une section "Sans tag" si nécessaire
-      if (untaggedExtensions.length > 0) {
-        tagNodes.push({ type: "tag" as const, tag: "— Sans tag —" });
+    // Grouper par catégorie
+    for (const ext of allExtensions) {
+      const category = tagsMap[ext.id]?.[0] || "— Sans catégorie —";
+      if (!categories.has(category)) {
+        categories.set(category, []);
       }
 
-      return tagNodes;
+      const iconPath = ext.packageJSON.icon
+        ? this.view?.webview.asWebviewUri(
+            vscode.Uri.file(path.join(ext.extensionPath, ext.packageJSON.icon))
+          )?.toString()
+        : undefined;
+
+      categories.get(category)!.push({
+        id: ext.id,
+        name: ext.packageJSON.displayName ?? ext.packageJSON.name ?? ext.id,
+        iconPath
+      });
     }
 
-    if (element.type === "tag") {
-      // Sous un tag : afficher les extensions avec ce tag
-      if (element.tag === "— Sans tag —") {
-        // Extensions sans aucun tag
-        const extensionsWithTags = new Set(
-          Object.keys(this.store.getAll())
-        );
-        return allExtensions
-          .filter((ext) => !extensionsWithTags.has(ext.id))
-          .map((extension) => ({
-            type: "allExtension" as const,
-            extension
-          }))
-          .sort((a, b) => {
-            const nameA =
-              a.extension.packageJSON.displayName ??
-              a.extension.packageJSON.name ??
-              a.extension.id;
-            const nameB =
-              b.extension.packageJSON.displayName ??
-              b.extension.packageJSON.name ??
-              b.extension.id;
-            return nameA.localeCompare(nameB);
-          });
+    // Trier les extensions dans chaque catégorie
+    for (const [, exts] of categories) {
+      exts.sort((a, b) => a.name.localeCompare(b.name));
+    }
+
+    // Trier les catégories (Sans catégorie en dernier)
+    const sortedCategories = new Map<string, ExtensionInfo[]>();
+    const sortedKeys = Array.from(categories.keys()).sort((a, b) => {
+      if (a === "— Sans catégorie —") return 1;
+      if (b === "— Sans catégorie —") return -1;
+      return a.localeCompare(b);
+    });
+
+    for (const key of sortedKeys) {
+      sortedCategories.set(key, categories.get(key)!);
+    }
+
+    return sortedCategories;
+  }
+
+  private render(): void {
+    if (!this.view) return;
+
+    const categories = this.getExtensionsByCategory();
+    const allCategoryNames = this.store.getAllTagNames();
+
+    let categoriesHtml = "";
+
+    for (const [categoryName, extensions] of categories) {
+      const isCollapsed = this.collapsedCategories.has(categoryName);
+      const color = categoryName === "— Sans catégorie —"
+        ? "#888888"
+        : getCategoryColor(categoryName, allCategoryNames);
+      const chevron = isCollapsed ? "▶" : "▼";
+
+      let extensionsHtml = "";
+      if (!isCollapsed) {
+        for (const ext of extensions) {
+          const iconHtml = ext.iconPath
+            ? `<img src="${ext.iconPath}" class="ext-icon" />`
+            : `<span class="ext-icon-fallback">📦</span>`;
+
+          extensionsHtml += `
+            <div class="extension" data-id="${escapeHtml(ext.id)}">
+              ${iconHtml}
+              <span class="ext-name">${escapeHtml(ext.name)}</span>
+            </div>
+          `;
+        }
       }
 
-      // Extensions avec ce tag spécifique
-      const tagsMap = this.store.getAll();
-      const extensionIds = Object.entries(tagsMap)
-        .filter(([, tags]) => tags.includes(element.tag))
-        .map(([id]) => id);
-
-      return allExtensions
-        .filter((ext) => extensionIds.includes(ext.id))
-        .map((extension) => ({
-          type: "allExtension" as const,
-          extension
-        }))
-        .sort((a, b) => {
-          const nameA =
-            a.extension.packageJSON.displayName ??
-            a.extension.packageJSON.name ??
-            a.extension.id;
-          const nameB =
-            b.extension.packageJSON.displayName ??
-            b.extension.packageJSON.name ??
-            b.extension.id;
-          return nameA.localeCompare(nameB);
-        });
+      categoriesHtml += `
+        <div class="category">
+          <div class="category-header" data-category="${escapeHtml(categoryName)}">
+            <span class="chevron">${chevron}</span>
+            <span class="category-name" style="color: ${color}; font-weight: bold;">${escapeHtml(categoryName)}</span>
+            <span class="category-count">(${extensions.length})</span>
+          </div>
+          <div class="category-extensions ${isCollapsed ? 'collapsed' : ''}">
+            ${extensionsHtml}
+          </div>
+        </div>
+      `;
     }
 
-    return [];
+    this.view.webview.html = `<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    :root {
+      color-scheme: light dark;
+    }
+    body {
+      margin: 0;
+      padding: 8px;
+      font-family: var(--vscode-font-family);
+      font-size: var(--vscode-font-size);
+      color: var(--vscode-foreground);
+    }
+    .category {
+      margin-bottom: 4px;
+    }
+    .category-header {
+      display: flex;
+      align-items: center;
+      padding: 4px 8px;
+      cursor: pointer;
+      border-radius: 4px;
+      user-select: none;
+    }
+    .category-header:hover {
+      background: var(--vscode-list-hoverBackground);
+    }
+    .chevron {
+      font-size: 10px;
+      width: 14px;
+      text-align: center;
+    }
+    .category-name {
+      margin-left: 4px;
+      font-size: 13px;
+    }
+    .category-count {
+      margin-left: 6px;
+      opacity: 0.7;
+      font-size: 12px;
+    }
+    .category-extensions {
+      margin-left: 20px;
+    }
+    .category-extensions.collapsed {
+      display: none;
+    }
+    .extension {
+      display: flex;
+      align-items: center;
+      padding: 4px 8px;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    .extension:hover {
+      background: var(--vscode-list-hoverBackground);
+    }
+    .ext-icon {
+      width: 18px;
+      height: 18px;
+      margin-right: 8px;
+      object-fit: contain;
+    }
+    .ext-icon-fallback {
+      width: 18px;
+      margin-right: 8px;
+      font-size: 14px;
+    }
+    .ext-name {
+      font-size: 13px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+  </style>
+</head>
+<body>
+  ${categoriesHtml}
+  <script>
+    const vscode = acquireVsCodeApi();
+
+    document.querySelectorAll('.category-header').forEach(header => {
+      header.addEventListener('click', () => {
+        const category = header.dataset.category;
+        vscode.postMessage({ command: 'toggleCategory', category });
+      });
+    });
+
+    document.querySelectorAll('.extension').forEach(ext => {
+      ext.addEventListener('click', () => {
+        const extensionId = ext.dataset.id;
+        vscode.postMessage({ command: 'openExtension', extensionId });
+      });
+
+      ext.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        const extensionId = ext.dataset.id;
+        vscode.postMessage({ command: 'setCategory', extensionId });
+      });
+    });
+  </script>
+</body>
+</html>`;
   }
 }
 
@@ -543,12 +650,6 @@ function resolveExtensionId(arg: unknown): string | undefined {
 async function pickExtension(
   arg: unknown
 ): Promise<vscode.Extension<any> | undefined> {
-  // Gérer le cas où l'argument vient d'un nœud de la TreeView
-  const nodeArg = arg as ExtensionTagNode | undefined;
-  if (nodeArg && "type" in nodeArg && nodeArg.type === "allExtension") {
-    return nodeArg.extension;
-  }
-
   const extensionId = resolveExtensionId(arg);
   if (extensionId) {
     const resolved = vscode.extensions.all.find((ext) => ext.id === extensionId);
@@ -730,7 +831,10 @@ export function activate(context: vscode.ExtensionContext) {
   const provider = new ProjectIconViewProvider();
   let watcher: vscode.FileSystemWatcher | undefined;
   const tagsStore = new ExtensionTagsStore(context);
-  const tagsProvider = new ExtensionTagsViewProvider(tagsStore);
+  const categoriesProvider = new ExtensionCategoriesWebviewProvider(
+    tagsStore,
+    context.extensionUri
+  );
 
   const updateWorkspace = () => {
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
@@ -762,11 +866,9 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.window.registerWebviewViewProvider(VIEW_ID, provider)
   );
 
-  const tagsTreeView = vscode.window.createTreeView(EXTENSION_TAGS_VIEW_ID, {
-    treeDataProvider: tagsProvider,
-    showCollapseAll: true
-  });
-  context.subscriptions.push(tagsTreeView);
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider(EXTENSION_TAGS_VIEW_ID, categoriesProvider)
+  );
 
   updateWorkspace();
 
@@ -839,7 +941,7 @@ export function activate(context: vscode.ExtensionContext) {
       }
 
       await tagsStore.setTagsForExtension(extension.id, newCategory);
-      tagsProvider.refresh();
+      categoriesProvider.refresh();
     }
   );
 

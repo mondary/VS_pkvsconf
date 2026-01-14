@@ -2,7 +2,7 @@
   "name": "vs-pkvsconf",
   "displayName": "VS_pkvsconf",
   "description": "Adds a toolbar button in Explorer to reveal the active file in Finder.",
-  "version": "0.3.17",
+  "version": "0.3.18",
   "publisher": "local",
   "icon": "icon.png",
   "license": "UNLICENSED",
@@ -72,7 +72,8 @@
       "extensionTagsContainer": [
         {
           "id": "extensionTagsView",
-          "name": "Extensions"
+          "name": "Extensions",
+          "type": "webview"
         }
       ]
     },
