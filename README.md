@@ -15,8 +15,8 @@ Place un fichier `icon.*` (ex: `icon.png`) a la racine du workspace pour affiche
 
 - 🧭 Reveal in Finder (macOS) via bouton dans la barre de titre de l'Explorer.
 - 📦 Taille du dossier racine en status bar avec rafraichissement manuel/auto.
-- 🖼️ Project Icon dans l'Explorer base sur `icon.*` a la racine.
-- 🐙 Open GitHub Repository depuis l'onglet Source Control.
+- 🖼️ Project Icon dans l'Explorer base sur `icon.*` a la racine (ex: `icon.png`). Sans icone, un message d'aide est affiche.
+- 🐙 Open GitHub Repository depuis l'onglet Source Control (multi-repos supportes).
 
 ## 📁 Arborescence
 
@@ -24,15 +24,13 @@ Place un fichier `icon.*` (ex: `icon.png`) a la racine du workspace pour affiche
 - `openspec/` : specs OpenSpec
 - `release/` : packages .vsix generes
 
-## 🛠️ Build et package (une seule commande)
+## 🛠️ Build, package et installation (.vsix)
 
 ```bash
 cd extension && npm run release
 ```
 
 Le .vsix est genere dans `release/` automatiquement (ex: `vs-pkvsconf-0.3.2.vsix`).
-
-## 📦 Installation du .vsix (instance ouverte)
 
 - Commande palette: "Extensions: Install from VSIX..."
 - Selectionner le fichier `vs-pkvsconf-0.3.2.vsix` dans `release/`

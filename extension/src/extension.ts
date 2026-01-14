@@ -228,7 +228,77 @@ function toGitHubHttps(rawUrl: string): string | undefined {
   return undefined;
 }
 
-async function getGitHubRepoUrl(
+interface GitRemote {
+  name: string;
+  fetchUrl?: string;
+  pushUrl?: string;
+}
+
+interface GitRepository {
+  rootUri: vscode.Uri;
+  state: { remotes: GitRemote[] };
+}
+
+interface GitApi {
+  repositories: GitRepository[];
+}
+
+interface GitExtension {
+  getAPI(version: number): GitApi;
+}
+
+function pickGitHubRemoteUrl(remotes: GitRemote[]): string | undefined {
+  const origin = remotes.find((remote) => remote.name === "origin");
+  const originUrl =
+    origin?.fetchUrl ?? origin?.pushUrl ?? (origin ? undefined : undefined);
+  const originGitHub = originUrl ? toGitHubHttps(originUrl) : undefined;
+  if (originGitHub) {
+    return originGitHub;
+  }
+
+  for (const remote of remotes) {
+    const url = remote.fetchUrl ?? remote.pushUrl;
+    if (!url) {
+      continue;
+    }
+    const githubUrl = toGitHubHttps(url);
+    if (githubUrl) {
+      return githubUrl;
+    }
+  }
+
+  return undefined;
+}
+
+async function getGitHubRepoUrlFromGitApi(): Promise<
+  { label: string; url: string }[]
+> {
+  const gitExtension =
+    vscode.extensions.getExtension<GitExtension>("vscode.git");
+  if (!gitExtension) {
+    return [];
+  }
+
+  const gitApi = gitExtension.isActive
+    ? gitExtension.exports.getAPI(1)
+    : (await gitExtension.activate()).getAPI(1);
+
+  return gitApi.repositories
+    .map((repo) => {
+      const url = pickGitHubRemoteUrl(repo.state.remotes);
+      if (!url) {
+        return undefined;
+      }
+
+      return {
+        label: path.basename(repo.rootUri.fsPath),
+        url
+      };
+    })
+    .filter((item): item is { label: string; url: string } => Boolean(item));
+}
+
+async function getGitHubRepoUrlFromRoot(
   workspaceRoot: string
 ): Promise<string | undefined> {
   try {
@@ -249,10 +319,13 @@ async function getGitHubRepoUrl(
         continue;
       }
 
-      if (currentSection === 'remote "origin"') {
+      if (currentSection.startsWith('remote "')) {
         const urlMatch = trimmed.match(/^url\s*=\s*(.+)$/);
         if (urlMatch) {
-          return toGitHubHttps(urlMatch[1]);
+          const githubUrl = toGitHubHttps(urlMatch[1]);
+          if (githubUrl) {
+            return githubUrl;
+          }
         }
       }
     }
@@ -357,13 +430,29 @@ export function activate(context: vscode.ExtensionContext) {
   const openRepoCmd = vscode.commands.registerCommand(
     "revealInFinderButton.openGitHubRepo",
     async () => {
+      const gitRepos = await getGitHubRepoUrlFromGitApi();
+      if (gitRepos.length > 1) {
+        const selection = await vscode.window.showQuickPick(gitRepos, {
+          placeHolder: "Select a GitHub repository to open"
+        });
+        if (selection) {
+          await vscode.env.openExternal(vscode.Uri.parse(selection.url));
+        }
+        return;
+      }
+
+      if (gitRepos.length === 1) {
+        await vscode.env.openExternal(vscode.Uri.parse(gitRepos[0].url));
+        return;
+      }
+
       const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
       if (!workspaceRoot) {
         vscode.window.showInformationMessage("No workspace folder open.");
         return;
       }
 
-      const repoUrl = await getGitHubRepoUrl(workspaceRoot);
+      const repoUrl = await getGitHubRepoUrlFromRoot(workspaceRoot);
       if (!repoUrl) {
         vscode.window.showInformationMessage(
           "No GitHub remote found in this workspace."
