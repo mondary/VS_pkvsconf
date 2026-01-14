@@ -43,15 +43,31 @@ Depuis les sources (build + package) :
 cd extension && npm run release
 ```
 
-Le .vsix est genere dans `release/` automatiquement (ex: `vs-pkvsconf-0.3.6.vsix`).
+Le .vsix est genere dans `release/` automatiquement (ex: `vs-pkvsconf-0.3.22.vsix`).
 
 Depuis un .vsix (installation) :
 
 - Commande palette (macOS: Cmd+Shift+P, Windows/Linux: Ctrl+Shift+P): "Extensions: Install from VSIX..."
-- Selectionner le fichier `vs-pkvsconf-0.3.6.vsix` dans `release/`
+- Selectionner le fichier `vs-pkvsconf-0.3.22.vsix` dans `release/`
 - Recharger la fenetre
 
 ## 🧾 Release Notes
+
+### 0.3.22
+
+- 🏷️ Nom de l'extension conserve en \"VS_pkvsconf\" et onglet affiche \"PK Extensions\".
+
+### 0.3.21
+
+- 🏷️ Renommage de l'onglet en \"PK Extensions\".
+
+### 0.3.20
+
+- 🧩 Nouveau pictogramme d'onglet (style extension/puzzle) et nom \"PK Extension\".
+
+### 0.3.19
+
+- 🏷️ Mise a jour de l'icone de l'onglet Extensions (tag plus explicite).
 
 ### 0.3.6
 
