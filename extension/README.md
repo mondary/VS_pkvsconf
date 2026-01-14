@@ -28,6 +28,10 @@ Extension VS Code qui ajoute un bouton dans la barre de titre de l'Explorer pour
 
   Clic droit sur une extension pour "Add Tag" ou "Create Tag". Une vue "Extension Tags" apparait dans l'Explorer avec des sections par tag (collapse/expand).
 
+- 🎨 Couleur de title bar par workspace
+
+  Une couleur est assignee automatiquement a chaque workspace pour distinguer les fenetres. La couleur est persistante et regenerable via la commande "Regenerer la couleur de la title bar".
+
 ## 📁 Arborescence
 
 - `extension/` : code de l'extension, build, scripts
@@ -42,15 +46,19 @@ Depuis les sources (build + package) :
 cd extension && npm run release
 ```
 
-Le .vsix est genere dans `release/` automatiquement (ex: `vs-pkvsconf-0.3.23.vsix`).
+Le .vsix est genere dans `release/` automatiquement (ex: `vs-pkvsconf-0.3.25.vsix`).
 
 Depuis un .vsix (installation) :
 
 - Commande palette (macOS: Cmd+Shift+P, Windows/Linux: Ctrl+Shift+P): "Extensions: Install from VSIX..."
-- Selectionner le fichier `vs-pkvsconf-0.3.23.vsix` dans `release/`
+- Selectionner le fichier `vs-pkvsconf-0.3.25.vsix` dans `release/`
 - Recharger la fenetre
 
 ## 🧾 Release Notes
+
+### 0.3.25
+
+- 🎨 Couleur de title bar par workspace (persistante + commande pour regenerer).
 
 ### 0.3.23
 

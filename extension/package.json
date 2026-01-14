@@ -2,7 +2,7 @@
   "name": "vs-pkvsconf",
   "displayName": "VS_pkvsconf",
   "description": "Adds a toolbar button in Explorer to reveal the active file in Finder.",
-  "version": "0.3.23",
+  "version": "0.3.25",
   "publisher": "local",
   "icon": "icon.png",
   "license": "UNLICENSED",
@@ -19,6 +19,7 @@
     "onCommand:pkvsconf.addTagToExtension",
     "onCommand:pkvsconf.createTagForExtension",
     "onCommand:pkvsconf.removeTagFromExtension",
+    "onCommand:pkvsconf.regenerateWorkspaceTitlebarColor",
     "onView:projectIconView",
     "onView:extensionTagsView",
     "onStartupFinished"
@@ -59,6 +60,31 @@
         "command": "pkvsconf.searchExtensions",
         "title": "Rechercher des extensions",
         "icon": "$(search)"
+      },
+      {
+        "command": "pkvsconf.regenerateWorkspaceTitlebarColor",
+        "title": "Regenerer la couleur de la title bar",
+        "icon": "$(refresh)"
+      }
+    ],
+    "colors": [
+      {
+        "id": "pkvsconf.rootSizeStatusBarItem.background",
+        "description": "Background color for the Root size status bar item.",
+        "defaults": {
+          "light": "#2A9D8F",
+          "dark": "#1E7067",
+          "highContrast": "#00A896"
+        }
+      },
+      {
+        "id": "pkvsconf.rootSizeStatusBarItem.foreground",
+        "description": "Foreground color for the Root size status bar item.",
+        "defaults": {
+          "light": "#FFFFFF",
+          "dark": "#FFFFFF",
+          "highContrast": "#FFFFFF"
+        }
       }
     ],
     "views": {
@@ -84,6 +110,9 @@
         },
         {
           "command": "pkvsconf.addTagToExtension"
+        },
+        {
+          "command": "pkvsconf.regenerateWorkspaceTitlebarColor"
         }
       ],
       "extension/context": [

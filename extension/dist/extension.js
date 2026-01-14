@@ -10,6 +10,14 @@ const ICON_PREFIX = "icon.";
 const VIEW_ID = "projectIconView";
 const EXTENSION_TAGS_VIEW_ID = "extensionTagsView";
 const EXTENSION_TAGS_STORAGE_KEY = "extensionTags";
+const WORKSPACE_TITLEBAR_COLOR_KEY = "workspaceTitlebarColor";
+const TITLEBAR_COLOR_KEYS = {
+    activeBackground: "titleBar.activeBackground",
+    inactiveBackground: "titleBar.inactiveBackground",
+    activeForeground: "titleBar.activeForeground",
+    inactiveForeground: "titleBar.inactiveForeground",
+    border: "titleBar.border"
+};
 function formatBytes(bytes) {
     if (bytes < 1024) {
         return `${bytes} B`;
@@ -132,6 +140,101 @@ function escapeHtml(value) {
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#39;");
+}
+function clamp(value, min, max) {
+    return Math.min(max, Math.max(min, value));
+}
+function toHex(value) {
+    return clamp(Math.round(value), 0, 255).toString(16).padStart(2, "0");
+}
+function hexToRgb(hex) {
+    const match = hex.trim().match(/^#?([0-9a-fA-F]{6})$/);
+    if (!match) {
+        return undefined;
+    }
+    const value = match[1];
+    return {
+        r: parseInt(value.slice(0, 2), 16),
+        g: parseInt(value.slice(2, 4), 16),
+        b: parseInt(value.slice(4, 6), 16)
+    };
+}
+function rgbToHex(r, g, b) {
+    return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
+function mixWith(color, target, amount) {
+    const clamped = clamp(amount, 0, 1);
+    return {
+        r: color.r + (target.r - color.r) * clamped,
+        g: color.g + (target.g - color.g) * clamped,
+        b: color.b + (target.b - color.b) * clamped
+    };
+}
+function adjustColor(hex, amount) {
+    const rgb = hexToRgb(hex);
+    if (!rgb) {
+        return hex;
+    }
+    const target = amount >= 0
+        ? { r: 255, g: 255, b: 255 }
+        : { r: 0, g: 0, b: 0 };
+    const mixed = mixWith(rgb, target, Math.abs(amount));
+    return rgbToHex(mixed.r, mixed.g, mixed.b);
+}
+function relativeLuminance(rgb) {
+    const toLinear = (value) => {
+        const normalized = value / 255;
+        return normalized <= 0.03928
+            ? normalized / 12.92
+            : Math.pow((normalized + 0.055) / 1.055, 2.4);
+    };
+    const r = toLinear(rgb.r);
+    const g = toLinear(rgb.g);
+    const b = toLinear(rgb.b);
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+function getReadableTextColor(hex) {
+    const rgb = hexToRgb(hex);
+    if (!rgb) {
+        return "#FFFFFF";
+    }
+    return relativeLuminance(rgb) > 0.5 ? "#1F1F1F" : "#FFFFFF";
+}
+function randomHslColor() {
+    const hue = Math.floor(Math.random() * 360);
+    const saturation = 68;
+    const lightness = 44;
+    const c = (1 - Math.abs(2 * lightness / 100 - 1)) * (saturation / 100);
+    const x = c * (1 - Math.abs(((hue / 60) % 2) - 1));
+    const m = lightness / 100 - c / 2;
+    let r = 0;
+    let g = 0;
+    let b = 0;
+    if (hue < 60) {
+        r = c;
+        g = x;
+    }
+    else if (hue < 120) {
+        r = x;
+        g = c;
+    }
+    else if (hue < 180) {
+        g = c;
+        b = x;
+    }
+    else if (hue < 240) {
+        g = x;
+        b = c;
+    }
+    else if (hue < 300) {
+        r = x;
+        b = c;
+    }
+    else {
+        r = c;
+        b = x;
+    }
+    return rgbToHex((r + m) * 255, (g + m) * 255, (b + m) * 255);
 }
 async function getDirectorySizeBytes(rootPath) {
     let total = 0;
@@ -602,6 +705,35 @@ async function promptNewTag() {
         placeHolder: "ai, syntax, theme"
     });
 }
+async function applyWorkspaceTitlebarColor(colorHex) {
+    const inactiveBackground = adjustColor(colorHex, -0.18);
+    const border = adjustColor(colorHex, -0.28);
+    const foreground = getReadableTextColor(colorHex);
+    const workbenchConfig = vscode.workspace.getConfiguration("workbench");
+    const existing = workbenchConfig.get("colorCustomizations") ?? {};
+    const base = typeof existing === "object" && existing !== null ? existing : {};
+    const next = {
+        ...base,
+        [TITLEBAR_COLOR_KEYS.activeBackground]: colorHex,
+        [TITLEBAR_COLOR_KEYS.inactiveBackground]: inactiveBackground,
+        [TITLEBAR_COLOR_KEYS.activeForeground]: foreground,
+        [TITLEBAR_COLOR_KEYS.inactiveForeground]: foreground,
+        [TITLEBAR_COLOR_KEYS.border]: border
+    };
+    await workbenchConfig.update("colorCustomizations", next, vscode.ConfigurationTarget.Workspace);
+}
+async function ensureWorkspaceTitlebarColor(context, forceNew = false) {
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    if (!workspaceFolder) {
+        return;
+    }
+    let color = context.workspaceState.get(WORKSPACE_TITLEBAR_COLOR_KEY);
+    if (!color || forceNew) {
+        color = randomHslColor();
+        await context.workspaceState.update(WORKSPACE_TITLEBAR_COLOR_KEY, color);
+    }
+    await applyWorkspaceTitlebarColor(color);
+}
 function pickGitHubRemoteUrl(remotes) {
     const origin = remotes.find((remote) => remote.name === "origin");
     const originUrl = origin?.fetchUrl ?? origin?.pushUrl ?? (origin ? undefined : undefined);
@@ -679,7 +811,7 @@ function activate(context) {
     let watcher;
     const tagsStore = new ExtensionTagsStore(context);
     const categoriesProvider = new ExtensionCategoriesWebviewProvider(tagsStore, context.extensionUri);
-    const updateWorkspace = () => {
+    const updateWorkspace = async () => {
         const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
         const workspaceRoot = workspaceFolder?.uri.fsPath;
         provider.setWorkspace(workspaceRoot);
@@ -691,6 +823,7 @@ function activate(context) {
         if (!workspaceRoot) {
             return;
         }
+        await ensureWorkspaceTitlebarColor(context);
         watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(workspaceRoot, "icon.*"));
         watcher.onDidCreate(() => provider.refresh());
         watcher.onDidChange(() => provider.refresh());
@@ -699,12 +832,16 @@ function activate(context) {
     };
     context.subscriptions.push(vscode.window.registerWebviewViewProvider(VIEW_ID, provider));
     context.subscriptions.push(vscode.window.registerWebviewViewProvider(EXTENSION_TAGS_VIEW_ID, categoriesProvider));
-    updateWorkspace();
-    context.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(() => updateWorkspace()));
+    void updateWorkspace();
+    context.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(() => {
+        void updateWorkspace();
+    }));
     const rootSizeItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
     rootSizeItem.text = "Root size: --";
     rootSizeItem.tooltip = "Click to refresh root folder size";
     rootSizeItem.command = "revealInFinderButton.refreshRootSize";
+    rootSizeItem.backgroundColor = new vscode.ThemeColor("pkvsconf.rootSizeStatusBarItem.background");
+    rootSizeItem.color = new vscode.ThemeColor("pkvsconf.rootSizeStatusBarItem.foreground");
     rootSizeItem.show();
     let rootSizeInProgress = false;
     const refreshRootSize = async () => {
@@ -801,8 +938,11 @@ function activate(context) {
             await vscode.commands.executeCommand("workbench.extensions.search", query);
         }
     });
+    const regenerateTitlebarColorCmd = vscode.commands.registerCommand("pkvsconf.regenerateWorkspaceTitlebarColor", async () => {
+        await ensureWorkspaceTitlebarColor(context, true);
+    });
     context.subscriptions.push(cmd, refreshCmd, openRepoCmd, rootSizeItem);
-    context.subscriptions.push(manageCategoryCmd, searchExtensionsCmd);
+    context.subscriptions.push(manageCategoryCmd, searchExtensionsCmd, regenerateTitlebarColorCmd);
     void refreshRootSize();
     const refreshIntervalMs = 5 * 60 * 1000;
     const refreshInterval = setInterval(() => {
