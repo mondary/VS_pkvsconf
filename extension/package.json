@@ -2,7 +2,7 @@
   "name": "vs-pkvsconf",
   "displayName": "VS_pkvsconf",
   "description": "Adds a toolbar button in Explorer to reveal the active file in Finder.",
-  "version": "0.3.22",
+  "version": "0.3.23",
   "publisher": "local",
   "icon": "icon.png",
   "license": "UNLICENSED",
@@ -30,7 +30,7 @@
         {
           "id": "extensionTagsContainer",
           "title": "PK Extensions",
-          "icon": "resources/tag-icon.svg"
+          "icon": "$(tag)"
         }
       ]
     },

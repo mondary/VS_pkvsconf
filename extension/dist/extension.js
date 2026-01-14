@@ -386,10 +386,10 @@ class ExtensionCategoriesWebviewProvider {
                 }
             }
             categoriesHtml += `
-        <div class="category">
+        <div class="category" style="--category-color: ${color};">
           <div class="category-header" data-category="${escapeHtml(categoryName)}">
             <span class="chevron">${chevron}</span>
-            <span class="category-name" style="color: ${color}; font-weight: bold;">${escapeHtml(categoryName)}</span>
+            <span class="category-name">${escapeHtml(categoryName)}</span>
             <span class="category-count">(${extensions.length})</span>
           </div>
           <div class="category-extensions ${isCollapsed ? 'collapsed' : ''}">
@@ -436,11 +436,14 @@ class ExtensionCategoriesWebviewProvider {
     .category-name {
       margin-left: 4px;
       font-size: 13px;
+      font-weight: bold;
+      color: var(--category-color, var(--vscode-foreground));
     }
     .category-count {
       margin-left: 6px;
       opacity: 0.7;
       font-size: 12px;
+      color: var(--category-color, var(--vscode-foreground));
     }
     .category-extensions {
       margin-left: 20px;
@@ -474,6 +477,7 @@ class ExtensionCategoriesWebviewProvider {
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+      color: var(--category-color, var(--vscode-foreground));
     }
   </style>
 </head>
