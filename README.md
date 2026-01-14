@@ -9,21 +9,25 @@ Extension VS Code qui ajoute un bouton dans la barre de titre de l'Explorer pour
 
 ## ✅ Fonctionnalites
 
-🧭 Reveal in Finder (macOS)
+- 🧭 Reveal in Finder (macOS)
 
-Bouton dans la barre de titre de l'Explorer (en haut du panneau fichiers). Ouvre le fichier actif ou le dossier du workspace dans Finder.
+  Bouton dans la barre de titre de l'Explorer (en haut du panneau fichiers). Ouvre le fichier actif ou le dossier du workspace dans Finder.
 
-📦 Taille du dossier racine
+- 📦 Taille du dossier racine
 
-Indicateur en bas (status bar) avec rafraichissement automatique et clic pour forcer la mise a jour.
+  Indicateur en bas (status bar) avec rafraichissement automatique et clic pour forcer la mise a jour.
 
-🖼️ Project Icon
+- 🖼️ Project Icon
 
-Place un fichier `icon.*` (ex: `icon.png`) a la racine du workspace. L'icone s'affiche dans l'Explorer; sinon un message d'aide est affiche.
+  Place un fichier `icon.*` (ex: `icon.png`) a la racine du workspace. L'icone s'affiche dans l'Explorer; sinon un message d'aide est affiche.
 
-🐙 Open GitHub Repository
+- 🐙 Open GitHub Repository
 
-Bouton dans l'onglet Source Control. Ouvre le repo GitHub du projet; si plusieurs repos sont detectes, un choix est propose.
+  Bouton dans l'onglet Source Control. Ouvre le repo GitHub du projet; si plusieurs repos sont detectes, un choix est propose.
+
+- 🏷️ Tags d'extensions
+
+  Clic droit sur une extension pour "Add Tag" ou "Create Tag". Une vue "Extension Tags" apparait dans l'Explorer avec des sections par tag (collapse/expand).
 
 ## 📁 Arborescence
 
@@ -39,10 +43,29 @@ Depuis les sources (build + package) :
 cd extension && npm run release
 ```
 
-Le .vsix est genere dans `release/` automatiquement (ex: `vs-pkvsconf-0.3.2.vsix`).
+Le .vsix est genere dans `release/` automatiquement (ex: `vs-pkvsconf-0.3.6.vsix`).
 
 Depuis un .vsix (installation) :
 
-- Commande palette: "Extensions: Install from VSIX..."
-- Selectionner le fichier `vs-pkvsconf-0.3.2.vsix` dans `release/`
+- Commande palette (macOS: Cmd+Shift+P, Windows/Linux: Ctrl+Shift+P): "Extensions: Install from VSIX..."
+- Selectionner le fichier `vs-pkvsconf-0.3.6.vsix` dans `release/`
 - Recharger la fenetre
+
+## 🧾 Release Notes
+
+### 0.3.6
+
+- 🏷️ La vue "Extension Tags" est maintenant dans l'Explorer (plus stable que l'onglet Extensions).
+
+### 0.3.5
+
+- 🏷️ Ajustement du container de vue "Extension Tags" pour l'onglet Extensions.
+
+### 0.3.4
+
+- 🏷️ Fix de l'enregistrement de la vue "Extension Tags" dans l'onglet Extensions.
+
+### 0.3.3
+
+- 🏷️ Ajout du tagging d'extensions avec vue "Extension Tags" (sections par tag, collapse/expand).
+- 🐙 Open GitHub Repository supporte le multi-repo (selection si plusieurs repos).

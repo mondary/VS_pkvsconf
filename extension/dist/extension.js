@@ -8,6 +8,8 @@ const path = require("path");
 const SIZE_UNITS = ["KB", "MB", "GB", "TB"];
 const ICON_PREFIX = "icon.";
 const VIEW_ID = "projectIconView";
+const EXTENSION_TAGS_VIEW_ID = "extensionTagsView";
+const EXTENSION_TAGS_STORAGE_KEY = "extensionTags";
 function formatBytes(bytes) {
     if (bytes < 1024) {
         return `${bytes} B`;
@@ -190,6 +192,161 @@ function toGitHubHttps(rawUrl) {
     }
     return undefined;
 }
+class ExtensionTagsStore {
+    constructor(context) {
+        this.context = context;
+    }
+    getAll() {
+        return this.context.globalState.get(EXTENSION_TAGS_STORAGE_KEY, {});
+    }
+    async setAll(tags) {
+        await this.context.globalState.update(EXTENSION_TAGS_STORAGE_KEY, tags);
+    }
+    getTagsForExtension(extensionId) {
+        const tags = this.getAll()[extensionId] ?? [];
+        return tags.slice().sort((a, b) => a.localeCompare(b));
+    }
+    async setTagsForExtension(extensionId, tags) {
+        const next = this.getAll();
+        const normalized = uniqueTags(tags);
+        if (normalized.length === 0) {
+            delete next[extensionId];
+        }
+        else {
+            next[extensionId] = normalized;
+        }
+        await this.setAll(next);
+    }
+    getAllTagNames() {
+        const names = new Set();
+        for (const tags of Object.values(this.getAll())) {
+            for (const tag of tags) {
+                names.add(tag);
+            }
+        }
+        return Array.from(names).sort((a, b) => a.localeCompare(b));
+    }
+}
+class ExtensionTagsViewProvider {
+    constructor(store) {
+        this.store = store;
+        this.emitter = new vscode.EventEmitter();
+        this.onDidChangeTreeData = this.emitter.event;
+    }
+    refresh() {
+        this.emitter.fire();
+    }
+    getTreeItem(element) {
+        if (element.type === "tag") {
+            const item = new vscode.TreeItem(element.tag, vscode.TreeItemCollapsibleState.Collapsed);
+            item.contextValue = "extensionTagGroup";
+            return item;
+        }
+        const label = element.extension.packageJSON.displayName ??
+            element.extension.packageJSON.name ??
+            element.extension.id;
+        const item = new vscode.TreeItem(label, vscode.TreeItemCollapsibleState.None);
+        item.description = element.extension.id;
+        item.iconPath = new vscode.ThemeIcon("extensions");
+        item.command = {
+            command: "workbench.extensions.action.showExtensionsWithIds",
+            title: "Show Extension",
+            arguments: [[element.extension.id]]
+        };
+        item.contextValue = "extensionTagItem";
+        return item;
+    }
+    getChildren(element) {
+        const tags = this.store.getAll();
+        const installed = vscode.extensions.all;
+        if (!element) {
+            return this.store.getAllTagNames().map((tag) => ({ type: "tag", tag }));
+        }
+        if (element.type === "tag") {
+            const extensions = Object.entries(tags)
+                .filter(([, tagList]) => tagList.includes(element.tag))
+                .map(([extensionId]) => installed.find((ext) => ext.id === extensionId))
+                .filter((ext) => Boolean(ext))
+                .sort((a, b) => {
+                const nameA = a.packageJSON.displayName ?? a.packageJSON.name ?? a.id;
+                const nameB = b.packageJSON.displayName ?? b.packageJSON.name ?? b.id;
+                return nameA.localeCompare(nameB);
+            });
+            return extensions.map((extension) => ({
+                type: "extension",
+                tag: element.tag,
+                extension
+            }));
+        }
+        return [];
+    }
+}
+function normalizeTag(tag) {
+    const trimmed = tag.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+}
+function uniqueTags(tags) {
+    const seen = new Set();
+    for (const tag of tags) {
+        const normalized = normalizeTag(tag);
+        if (normalized) {
+            seen.add(normalized);
+        }
+    }
+    return Array.from(seen).sort((a, b) => a.localeCompare(b));
+}
+function resolveExtensionId(arg) {
+    if (!arg) {
+        return undefined;
+    }
+    if (typeof arg === "string") {
+        return arg;
+    }
+    const anyArg = arg;
+    return anyArg.id ?? anyArg.identifier?.id ?? anyArg.extensionId;
+}
+async function pickExtension(arg) {
+    const extensionId = resolveExtensionId(arg);
+    if (extensionId) {
+        const resolved = vscode.extensions.all.find((ext) => ext.id === extensionId);
+        if (resolved) {
+            return resolved;
+        }
+    }
+    if (arg && arg.packageJSON) {
+        return arg;
+    }
+    const picks = vscode.extensions.all
+        .map((extension) => ({
+        label: extension.packageJSON.displayName ??
+            extension.packageJSON.name ??
+            extension.id,
+        description: extension.id,
+        extension
+    }))
+        .sort((a, b) => a.label.localeCompare(b.label));
+    const selection = await vscode.window.showQuickPick(picks, {
+        placeHolder: "Select an extension"
+    });
+    return selection?.extension;
+}
+async function pickExistingTag(store) {
+    const existingTags = store.getAllTagNames();
+    if (existingTags.length === 0) {
+        return await vscode.window.showInputBox({
+            prompt: "Create a new tag",
+            placeHolder: "ai, syntax, theme"
+        });
+    }
+    const selection = await vscode.window.showQuickPick(existingTags.map((tag) => ({ label: tag })), { placeHolder: "Select a tag" });
+    return selection?.label;
+}
+async function promptNewTag() {
+    return await vscode.window.showInputBox({
+        prompt: "New tag name",
+        placeHolder: "ai, syntax, theme"
+    });
+}
 function pickGitHubRemoteUrl(remotes) {
     const origin = remotes.find((remote) => remote.name === "origin");
     const originUrl = origin?.fetchUrl ?? origin?.pushUrl ?? (origin ? undefined : undefined);
@@ -265,6 +422,8 @@ async function getGitHubRepoUrlFromRoot(workspaceRoot) {
 function activate(context) {
     const provider = new ProjectIconViewProvider();
     let watcher;
+    const tagsStore = new ExtensionTagsStore(context);
+    const tagsProvider = new ExtensionTagsViewProvider(tagsStore);
     const updateWorkspace = () => {
         const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
         const workspaceRoot = workspaceFolder?.uri.fsPath;
@@ -284,6 +443,11 @@ function activate(context) {
         context.subscriptions.push(watcher);
     };
     context.subscriptions.push(vscode.window.registerWebviewViewProvider(VIEW_ID, provider));
+    const tagsTreeView = vscode.window.createTreeView(EXTENSION_TAGS_VIEW_ID, {
+        treeDataProvider: tagsProvider,
+        showCollapseAll: true
+    });
+    context.subscriptions.push(tagsTreeView);
     updateWorkspace();
     context.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(() => updateWorkspace()));
     const rootSizeItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
@@ -323,6 +487,66 @@ function activate(context) {
         }
     };
     const refreshCmd = vscode.commands.registerCommand("revealInFinderButton.refreshRootSize", refreshRootSize);
+    const addTagCmd = vscode.commands.registerCommand("pkvsconf.addTagToExtension", async (arg) => {
+        const extension = await pickExtension(arg);
+        if (!extension) {
+            return;
+        }
+        const picked = await pickExistingTag(tagsStore);
+        const tag = picked ? normalizeTag(picked) : undefined;
+        if (!tag) {
+            return;
+        }
+        const currentTags = tagsStore.getTagsForExtension(extension.id);
+        if (currentTags.includes(tag)) {
+            vscode.window.showInformationMessage(`Tag "${tag}" already exists for ${extension.id}.`);
+            return;
+        }
+        await tagsStore.setTagsForExtension(extension.id, [
+            ...currentTags,
+            tag
+        ]);
+        tagsProvider.refresh();
+    });
+    const createTagCmd = vscode.commands.registerCommand("pkvsconf.createTagForExtension", async (arg) => {
+        const extension = await pickExtension(arg);
+        if (!extension) {
+            return;
+        }
+        const picked = await promptNewTag();
+        const tag = picked ? normalizeTag(picked) : undefined;
+        if (!tag) {
+            return;
+        }
+        const currentTags = tagsStore.getTagsForExtension(extension.id);
+        if (currentTags.includes(tag)) {
+            vscode.window.showInformationMessage(`Tag "${tag}" already exists for ${extension.id}.`);
+            return;
+        }
+        await tagsStore.setTagsForExtension(extension.id, [
+            ...currentTags,
+            tag
+        ]);
+        tagsProvider.refresh();
+    });
+    const removeTagCmd = vscode.commands.registerCommand("pkvsconf.removeTagFromExtension", async (arg) => {
+        const extension = await pickExtension(arg);
+        if (!extension) {
+            return;
+        }
+        const currentTags = tagsStore.getTagsForExtension(extension.id);
+        if (currentTags.length === 0) {
+            vscode.window.showInformationMessage(`No tags found for ${extension.id}.`);
+            return;
+        }
+        const selection = await vscode.window.showQuickPick(currentTags.map((tag) => ({ label: tag })), { placeHolder: "Select a tag to remove" });
+        if (!selection) {
+            return;
+        }
+        const nextTags = currentTags.filter((tag) => tag !== selection.label);
+        await tagsStore.setTagsForExtension(extension.id, nextTags);
+        tagsProvider.refresh();
+    });
     const openRepoCmd = vscode.commands.registerCommand("revealInFinderButton.openGitHubRepo", async () => {
         const gitRepos = await getGitHubRepoUrlFromGitApi();
         if (gitRepos.length > 1) {
@@ -366,6 +590,7 @@ function activate(context) {
         await vscode.commands.executeCommand("revealFileInOS", uri);
     });
     context.subscriptions.push(cmd, refreshCmd, openRepoCmd, rootSizeItem);
+    context.subscriptions.push(addTagCmd, createTagCmd, removeTagCmd);
     void refreshRootSize();
     const refreshIntervalMs = 5 * 60 * 1000;
     const refreshInterval = setInterval(() => {

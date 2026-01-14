@@ -2,7 +2,7 @@
   "name": "vs-pkvsconf",
   "displayName": "VS_pkvsconf",
   "description": "Adds a toolbar button in Explorer to reveal the active file in Finder.",
-  "version": "0.3.2",
+  "version": "0.3.9",
   "publisher": "local",
   "icon": "icon.png",
   "license": "UNLICENSED",
@@ -16,11 +16,24 @@
     "onCommand:revealInFinderButton.revealActive",
     "onCommand:revealInFinderButton.refreshRootSize",
     "onCommand:revealInFinderButton.openGitHubRepo",
+    "onCommand:pkvsconf.addTagToExtension",
+    "onCommand:pkvsconf.createTagForExtension",
+    "onCommand:pkvsconf.removeTagFromExtension",
     "onView:projectIconView",
+    "onView:extensionTagsView",
     "onStartupFinished"
   ],
   "main": "./dist/extension.js",
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "extensionTagsContainer",
+          "title": "Extension Tags",
+          "icon": "resources/tag-icon.svg"
+        }
+      ]
+    },
     "commands": [
       {
         "command": "revealInFinderButton.revealActive",
@@ -36,6 +49,21 @@
         "command": "revealInFinderButton.openGitHubRepo",
         "title": "Open GitHub Repository",
         "icon": "$(github)"
+      },
+      {
+        "command": "pkvsconf.addTagToExtension",
+        "title": "Extensions: Add Tag",
+        "icon": "$(tag)"
+      },
+      {
+        "command": "pkvsconf.createTagForExtension",
+        "title": "Extensions: Create Tag",
+        "icon": "$(tag)"
+      },
+      {
+        "command": "pkvsconf.removeTagFromExtension",
+        "title": "Extensions: Remove Tag",
+        "icon": "$(tag)"
       }
     ],
     "views": {
@@ -45,12 +73,44 @@
           "name": "Project Icon",
           "type": "webview"
         }
+      ],
+      "extensionTagsContainer": [
+        {
+          "id": "extensionTagsView",
+          "name": "Tags"
+        }
       ]
     },
     "menus": {
       "commandPalette": [
         {
           "command": "revealInFinderButton.openGitHubRepo"
+        },
+        {
+          "command": "pkvsconf.addTagToExtension"
+        },
+        {
+          "command": "pkvsconf.createTagForExtension"
+        },
+        {
+          "command": "pkvsconf.removeTagFromExtension"
+        }
+      ],
+      "extension/context": [
+        {
+          "command": "pkvsconf.addTagToExtension",
+          "when": "extensionIsInstalled",
+          "group": "navigation@1"
+        },
+        {
+          "command": "pkvsconf.createTagForExtension",
+          "when": "extensionIsInstalled",
+          "group": "navigation@2"
+        },
+        {
+          "command": "pkvsconf.removeTagFromExtension",
+          "when": "extensionIsInstalled",
+          "group": "navigation@3"
         }
       ],
       "scm/title": [
