@@ -253,7 +253,8 @@ type ExtensionTagsMap = Record<string, string[]>;
 
 type ExtensionTagNode =
   | { type: "tag"; tag: string }
-  | { type: "extension"; tag: string; extension: vscode.Extension<any> };
+  | { type: "extension"; tag: string; extension: vscode.Extension<any> }
+  | { type: "allExtension"; extension: vscode.Extension<any> };
 
 class ExtensionTagsStore {
   constructor(private context: vscode.ExtensionContext) {}
@@ -315,11 +316,58 @@ class ExtensionTagsViewProvider
 
   getTreeItem(element: ExtensionTagNode): vscode.TreeItem {
     if (element.type === "tag") {
+      // Compter les extensions dans ce tag
+      const allExtensions = vscode.extensions.all.filter(
+        (ext) => !ext.id.startsWith("vscode.")
+      );
+      let count: number;
+
+      if (element.tag === "— Sans tag —") {
+        const extensionsWithTags = new Set(Object.keys(this.store.getAll()));
+        count = allExtensions.filter((ext) => !extensionsWithTags.has(ext.id)).length;
+      } else {
+        const tagsMap = this.store.getAll();
+        count = Object.entries(tagsMap).filter(([, tags]) =>
+          tags.includes(element.tag)
+        ).length;
+      }
+
       const item = new vscode.TreeItem(
         element.tag,
-        vscode.TreeItemCollapsibleState.Collapsed
+        vscode.TreeItemCollapsibleState.Expanded
       );
+      item.description = `(${count})`;
+      item.iconPath = element.tag === "— Sans tag —"
+        ? new vscode.ThemeIcon("question")
+        : new vscode.ThemeIcon("tag");
       item.contextValue = "extensionTagGroup";
+      return item;
+    }
+
+    if (element.type === "allExtension") {
+      const label =
+        element.extension.packageJSON.displayName ??
+        element.extension.packageJSON.name ??
+        element.extension.id;
+      const tags = this.store.getTagsForExtension(element.extension.id);
+      const item = new vscode.TreeItem(
+        label,
+        vscode.TreeItemCollapsibleState.None
+      );
+      item.description = tags.length > 0 ? tags[0] : "";
+
+      // Utiliser le vrai logo de l'extension si disponible
+      const extensionIcon = element.extension.packageJSON.icon;
+      item.iconPath = extensionIcon
+        ? vscode.Uri.file(path.join(element.extension.extensionPath, extensionIcon))
+        : new vscode.ThemeIcon("extensions");
+      item.command = {
+        command: "workbench.extensions.action.showExtensionsWithIds",
+        title: "Show Extension",
+        arguments: [[element.extension.id]]
+      };
+      item.contextValue = "extensionListItem";
+      item.tooltip = `${element.extension.id}${tags.length > 0 ? `\nCatégorie: ${tags[0]}` : ""}`;
       return item;
     }
 
@@ -332,7 +380,12 @@ class ExtensionTagsViewProvider
       vscode.TreeItemCollapsibleState.None
     );
     item.description = element.extension.id;
-    item.iconPath = new vscode.ThemeIcon("extensions");
+
+    // Utiliser le vrai logo de l'extension si disponible
+    const extIcon = element.extension.packageJSON.icon;
+    item.iconPath = extIcon
+      ? vscode.Uri.file(path.join(element.extension.extensionPath, extIcon))
+      : new vscode.ThemeIcon("extensions");
     item.command = {
       command: "workbench.extensions.action.showExtensionsWithIds",
       title: "Show Extension",
@@ -343,35 +396,83 @@ class ExtensionTagsViewProvider
   }
 
   getChildren(element?: ExtensionTagNode): ExtensionTagNode[] {
-    const tags = this.store.getAll();
-    const installed = vscode.extensions.all;
+    const allExtensions = vscode.extensions.all.filter(
+      (ext) => !ext.id.startsWith("vscode.")
+    );
 
     if (!element) {
-      return this.store.getAllTagNames().map((tag) => ({ type: "tag", tag }));
+      // Niveau racine : afficher les tags + une section "Sans tag"
+      const tagNames = this.store.getAllTagNames();
+      const tagNodes: ExtensionTagNode[] = tagNames.map((tag) => ({
+        type: "tag" as const,
+        tag
+      }));
+
+      // Trouver les extensions sans tag
+      const extensionsWithTags = new Set(
+        Object.keys(this.store.getAll())
+      );
+      const untaggedExtensions = allExtensions.filter(
+        (ext) => !extensionsWithTags.has(ext.id)
+      );
+
+      // Ajouter une section "Sans tag" si nécessaire
+      if (untaggedExtensions.length > 0) {
+        tagNodes.push({ type: "tag" as const, tag: "— Sans tag —" });
+      }
+
+      return tagNodes;
     }
 
     if (element.type === "tag") {
-      const extensions = Object.entries(tags)
-        .filter(([, tagList]) => tagList.includes(element.tag))
-        .map(([extensionId]) =>
-          installed.find((ext) => ext.id === extensionId)
-        )
-        .filter(
-          (ext): ext is vscode.Extension<any> => Boolean(ext)
-        )
+      // Sous un tag : afficher les extensions avec ce tag
+      if (element.tag === "— Sans tag —") {
+        // Extensions sans aucun tag
+        const extensionsWithTags = new Set(
+          Object.keys(this.store.getAll())
+        );
+        return allExtensions
+          .filter((ext) => !extensionsWithTags.has(ext.id))
+          .map((extension) => ({
+            type: "allExtension" as const,
+            extension
+          }))
+          .sort((a, b) => {
+            const nameA =
+              a.extension.packageJSON.displayName ??
+              a.extension.packageJSON.name ??
+              a.extension.id;
+            const nameB =
+              b.extension.packageJSON.displayName ??
+              b.extension.packageJSON.name ??
+              b.extension.id;
+            return nameA.localeCompare(nameB);
+          });
+      }
+
+      // Extensions avec ce tag spécifique
+      const tagsMap = this.store.getAll();
+      const extensionIds = Object.entries(tagsMap)
+        .filter(([, tags]) => tags.includes(element.tag))
+        .map(([id]) => id);
+
+      return allExtensions
+        .filter((ext) => extensionIds.includes(ext.id))
+        .map((extension) => ({
+          type: "allExtension" as const,
+          extension
+        }))
         .sort((a, b) => {
           const nameA =
-            a.packageJSON.displayName ?? a.packageJSON.name ?? a.id;
+            a.extension.packageJSON.displayName ??
+            a.extension.packageJSON.name ??
+            a.extension.id;
           const nameB =
-            b.packageJSON.displayName ?? b.packageJSON.name ?? b.id;
+            b.extension.packageJSON.displayName ??
+            b.extension.packageJSON.name ??
+            b.extension.id;
           return nameA.localeCompare(nameB);
         });
-
-      return extensions.map((extension) => ({
-        type: "extension",
-        tag: element.tag,
-        extension
-      }));
     }
 
     return [];
@@ -412,6 +513,12 @@ function resolveExtensionId(arg: unknown): string | undefined {
 async function pickExtension(
   arg: unknown
 ): Promise<vscode.Extension<any> | undefined> {
+  // Gérer le cas où l'argument vient d'un nœud de la TreeView
+  const nodeArg = arg as ExtensionTagNode | undefined;
+  if (nodeArg && "type" in nodeArg && nodeArg.type === "allExtension") {
+    return nodeArg.extension;
+  }
+
   const extensionId = resolveExtensionId(arg);
   if (extensionId) {
     const resolved = vscode.extensions.all.find((ext) => ext.id === extensionId);
@@ -425,6 +532,7 @@ async function pickExtension(
   }
 
   const picks = vscode.extensions.all
+    .filter((ext) => !ext.id.startsWith("vscode."))
     .map((extension) => ({
       label:
         extension.packageJSON.displayName ??
@@ -441,22 +549,55 @@ async function pickExtension(
   return selection?.extension;
 }
 
-async function pickExistingTag(
-  store: ExtensionTagsStore
-): Promise<string | undefined> {
-  const existingTags = store.getAllTagNames();
-  if (existingTags.length === 0) {
-    return await vscode.window.showInputBox({
-      prompt: "Create a new tag",
-      placeHolder: "ai, syntax, theme"
-    });
+const NEW_CATEGORY_OPTION = "$(add) Nouvelle catégorie...";
+const NO_CATEGORY_OPTION = "$(close) Aucune catégorie";
+
+async function pickCategoryForExtension(
+  store: ExtensionTagsStore,
+  extensionId: string
+): Promise<string[] | undefined> {
+  const existingCategories = store.getAllTagNames();
+  const currentCategory = store.getTagsForExtension(extensionId)[0];
+
+  interface CategoryPickItem extends vscode.QuickPickItem {
+    action?: "new" | "none";
   }
 
-  const selection = await vscode.window.showQuickPick(
-    existingTags.map((tag) => ({ label: tag })),
-    { placeHolder: "Select a tag" }
-  );
-  return selection?.label;
+  const items: CategoryPickItem[] = [
+    { label: NEW_CATEGORY_OPTION, action: "new" },
+    { label: NO_CATEGORY_OPTION, action: "none" },
+    ...existingCategories.map((cat) => ({
+      label: cat,
+      description: cat === currentCategory ? "✓ actuelle" : undefined
+    }))
+  ];
+
+  const selection = await vscode.window.showQuickPick(items, {
+    placeHolder: currentCategory
+      ? `Catégorie actuelle : ${currentCategory}`
+      : "Choisir une catégorie"
+  });
+
+  if (!selection) {
+    return undefined;
+  }
+
+  if (selection.action === "none") {
+    return [];
+  }
+
+  if (selection.action === "new") {
+    const newCategory = await vscode.window.showInputBox({
+      prompt: "Nom de la nouvelle catégorie",
+      placeHolder: "AI, Theme, Language..."
+    });
+    if (newCategory && newCategory.trim()) {
+      return [newCategory.trim()];
+    }
+    return undefined;
+  }
+
+  return [selection.label];
 }
 
 async function promptNewTag(): Promise<string | undefined> {
@@ -654,7 +795,7 @@ export function activate(context: vscode.ExtensionContext) {
     refreshRootSize
   );
 
-  const addTagCmd = vscode.commands.registerCommand(
+  const manageCategoryCmd = vscode.commands.registerCommand(
     "pkvsconf.addTagToExtension",
     async (arg) => {
       const extension = await pickExtension(arg);
@@ -662,84 +803,12 @@ export function activate(context: vscode.ExtensionContext) {
         return;
       }
 
-      const picked = await pickExistingTag(tagsStore);
-      const tag = picked ? normalizeTag(picked) : undefined;
-      if (!tag) {
+      const newCategory = await pickCategoryForExtension(tagsStore, extension.id);
+      if (newCategory === undefined) {
         return;
       }
 
-      const currentTags = tagsStore.getTagsForExtension(extension.id);
-      if (currentTags.includes(tag)) {
-        vscode.window.showInformationMessage(
-          `Tag "${tag}" already exists for ${extension.id}.`
-        );
-        return;
-      }
-
-      await tagsStore.setTagsForExtension(extension.id, [
-        ...currentTags,
-        tag
-      ]);
-      tagsProvider.refresh();
-    }
-  );
-
-  const createTagCmd = vscode.commands.registerCommand(
-    "pkvsconf.createTagForExtension",
-    async (arg) => {
-      const extension = await pickExtension(arg);
-      if (!extension) {
-        return;
-      }
-
-      const picked = await promptNewTag();
-      const tag = picked ? normalizeTag(picked) : undefined;
-      if (!tag) {
-        return;
-      }
-
-      const currentTags = tagsStore.getTagsForExtension(extension.id);
-      if (currentTags.includes(tag)) {
-        vscode.window.showInformationMessage(
-          `Tag "${tag}" already exists for ${extension.id}.`
-        );
-        return;
-      }
-
-      await tagsStore.setTagsForExtension(extension.id, [
-        ...currentTags,
-        tag
-      ]);
-      tagsProvider.refresh();
-    }
-  );
-
-  const removeTagCmd = vscode.commands.registerCommand(
-    "pkvsconf.removeTagFromExtension",
-    async (arg) => {
-      const extension = await pickExtension(arg);
-      if (!extension) {
-        return;
-      }
-
-      const currentTags = tagsStore.getTagsForExtension(extension.id);
-      if (currentTags.length === 0) {
-        vscode.window.showInformationMessage(
-          `No tags found for ${extension.id}.`
-        );
-        return;
-      }
-
-      const selection = await vscode.window.showQuickPick(
-        currentTags.map((tag) => ({ label: tag })),
-        { placeHolder: "Select a tag to remove" }
-      );
-      if (!selection) {
-        return;
-      }
-
-      const nextTags = currentTags.filter((tag) => tag !== selection.label);
-      await tagsStore.setTagsForExtension(extension.id, nextTags);
+      await tagsStore.setTagsForExtension(extension.id, newCategory);
       tagsProvider.refresh();
     }
   );
@@ -812,7 +881,7 @@ export function activate(context: vscode.ExtensionContext) {
   );
 
   context.subscriptions.push(cmd, refreshCmd, openRepoCmd, rootSizeItem);
-  context.subscriptions.push(addTagCmd, createTagCmd, removeTagCmd);
+  context.subscriptions.push(manageCategoryCmd);
 
   void refreshRootSize();
 
