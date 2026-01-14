@@ -15,6 +15,7 @@
   "activationEvents": [
     "onCommand:revealInFinderButton.revealActive",
     "onCommand:revealInFinderButton.refreshRootSize",
+    "onCommand:revealInFinderButton.openGitHubRepo",
     "onView:projectIconView",
     "onStartupFinished"
   ],
@@ -30,6 +31,11 @@
         "command": "revealInFinderButton.refreshRootSize",
         "title": "Refresh Root Folder Size",
         "icon": "$(database)"
+      },
+      {
+        "command": "revealInFinderButton.openGitHubRepo",
+        "title": "Open GitHub Repository",
+        "icon": "$(github)"
       }
     ],
     "views": {
@@ -42,10 +48,26 @@
       ]
     },
     "menus": {
+      "commandPalette": [
+        {
+          "command": "revealInFinderButton.openGitHubRepo"
+        }
+      ],
+      "scm/title": [
+        {
+          "command": "revealInFinderButton.openGitHubRepo",
+          "group": "navigation"
+        }
+      ],
       "view/title": [
         {
           "command": "revealInFinderButton.revealActive",
           "when": "view == workbench.explorer.fileView && isMac",
+          "group": "navigation"
+        },
+        {
+          "command": "revealInFinderButton.openGitHubRepo",
+          "when": "view == workbench.scm",
           "group": "navigation"
         }
       ]

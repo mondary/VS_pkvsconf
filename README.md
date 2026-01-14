@@ -1,5 +1,8 @@
 # VS_pkvsconf
 
+![Extension icon](extension/icon.png)
+![Project icon](icon.png)
+
 ✨ Extension VS Code simple, claire et sympa pour booster ton Explorer.
 
 Extension VS Code qui ajoute un bouton dans la barre de titre de l'Explorer pour reveler le fichier actif dans Finder (macOS), un indicateur de taille du dossier racine, et un panneau "Project Icon" dans l'Explorer.
@@ -13,6 +16,7 @@ Place un fichier `icon.*` (ex: `icon.png`) a la racine du workspace pour affiche
 - 🧭 Reveal in Finder (macOS) via bouton dans la barre de titre de l'Explorer.
 - 📦 Taille du dossier racine en status bar avec rafraichissement manuel/auto.
 - 🖼️ Project Icon dans l'Explorer base sur `icon.*` a la racine.
+- 🐙 Open GitHub Repository depuis l'onglet Source Control.
 
 ## 📁 Arborescence
 

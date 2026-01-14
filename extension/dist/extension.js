@@ -163,6 +163,62 @@ async function getDirectorySizeBytes(rootPath) {
     }
     return { total, hadError };
 }
+function toGitHubHttps(rawUrl) {
+    const trimmed = rawUrl.trim();
+    if (trimmed.startsWith("git@github.com:")) {
+        const repoPath = trimmed.replace("git@github.com:", "").replace(/\.git$/, "");
+        return `https://github.com/${repoPath}`;
+    }
+    if (trimmed.startsWith("ssh://git@github.com/")) {
+        const repoPath = trimmed
+            .replace("ssh://git@github.com/", "")
+            .replace(/\.git$/, "");
+        return `https://github.com/${repoPath}`;
+    }
+    if (trimmed.startsWith("https://github.com/")) {
+        return trimmed.replace(/\.git$/, "");
+    }
+    if (trimmed.startsWith("http://github.com/")) {
+        return `https://github.com/${trimmed
+            .replace("http://github.com/", "")
+            .replace(/\.git$/, "")}`;
+    }
+    if (trimmed.startsWith("git://github.com/")) {
+        return `https://github.com/${trimmed
+            .replace("git://github.com/", "")
+            .replace(/\.git$/, "")}`;
+    }
+    return undefined;
+}
+async function getGitHubRepoUrl(workspaceRoot) {
+    try {
+        const configPath = path.join(workspaceRoot, ".git", "config");
+        const content = await fs.readFile(configPath, "utf8");
+        const lines = content.split(/\r?\n/);
+        let currentSection = "";
+        for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed) {
+                continue;
+            }
+            const sectionMatch = trimmed.match(/^\[(.+)\]$/);
+            if (sectionMatch) {
+                currentSection = sectionMatch[1];
+                continue;
+            }
+            if (currentSection === 'remote "origin"') {
+                const urlMatch = trimmed.match(/^url\s*=\s*(.+)$/);
+                if (urlMatch) {
+                    return toGitHubHttps(urlMatch[1]);
+                }
+            }
+        }
+    }
+    catch {
+        return undefined;
+    }
+    return undefined;
+}
 function activate(context) {
     const provider = new ProjectIconViewProvider();
     let watcher;
@@ -224,6 +280,19 @@ function activate(context) {
         }
     };
     const refreshCmd = vscode.commands.registerCommand("revealInFinderButton.refreshRootSize", refreshRootSize);
+    const openRepoCmd = vscode.commands.registerCommand("revealInFinderButton.openGitHubRepo", async () => {
+        const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        if (!workspaceRoot) {
+            vscode.window.showInformationMessage("No workspace folder open.");
+            return;
+        }
+        const repoUrl = await getGitHubRepoUrl(workspaceRoot);
+        if (!repoUrl) {
+            vscode.window.showInformationMessage("No GitHub remote found in this workspace.");
+            return;
+        }
+        await vscode.env.openExternal(vscode.Uri.parse(repoUrl));
+    });
     const cmd = vscode.commands.registerCommand("revealInFinderButton.revealActive", async () => {
         if (process.platform !== "darwin") {
             vscode.window.showInformationMessage("Reveal in Finder is only available on macOS.");
@@ -239,7 +308,7 @@ function activate(context) {
         }
         await vscode.commands.executeCommand("revealFileInOS", uri);
     });
-    context.subscriptions.push(cmd, refreshCmd, rootSizeItem);
+    context.subscriptions.push(cmd, refreshCmd, openRepoCmd, rootSizeItem);
     void refreshRootSize();
     const refreshIntervalMs = 5 * 60 * 1000;
     const refreshInterval = setInterval(() => {
