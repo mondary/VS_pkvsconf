@@ -22,14 +22,17 @@ function formatBytes(bytes: number): string {
   return `${size.toFixed(precision)} ${SIZE_UNITS[unitIndex]}`;
 }
 
-async function getDirectorySizeBytes(rootPath: string): Promise<number> {
+async function getDirectorySizeBytes(
+  rootPath: string
+): Promise<{ total: number; hadError: boolean }> {
   let total = 0;
+  let hadError = false;
   let entries: Dirent[];
 
   try {
     entries = await fs.readdir(rootPath, { withFileTypes: true });
   } catch {
-    return 0;
+    return { total: 0, hadError: true };
   }
 
   for (const entry of entries) {
@@ -41,17 +44,19 @@ async function getDirectorySizeBytes(rootPath: string): Promise<number> {
       }
 
       if (entry.isDirectory()) {
-        total += await getDirectorySizeBytes(entryPath);
+        const result = await getDirectorySizeBytes(entryPath);
+        total += result.total;
+        hadError = hadError || result.hadError;
       } else if (entry.isFile()) {
         const stat = await fs.stat(entryPath);
         total += stat.size;
       }
     } catch {
-      continue;
+      hadError = true;
     }
   }
 
-  return total;
+  return { total, hadError };
 }
 
 export function activate(context: vscode.ExtensionContext) {
@@ -79,14 +84,23 @@ export function activate(context: vscode.ExtensionContext) {
       return;
     }
 
+    if (workspaceUri.scheme !== "file") {
+      rootSizeItem.text = "Root size: unsupported";
+      rootSizeItem.tooltip = "Not available on remote or virtual workspaces";
+      return;
+    }
+
     rootSizeInProgress = true;
     rootSizeItem.text = "Root size: calculating...";
     rootSizeItem.tooltip = `Root: ${workspaceUri.fsPath}`;
 
     try {
-      const sizeBytes = await getDirectorySizeBytes(workspaceUri.fsPath);
-      const formatted = formatBytes(sizeBytes);
+      const result = await getDirectorySizeBytes(workspaceUri.fsPath);
+      const formatted = formatBytes(result.total);
       rootSizeItem.text = `Root size: ${formatted}`;
+      if (result.hadError) {
+        rootSizeItem.tooltip = `Root: ${workspaceUri.fsPath}\nSome folders could not be read.`;
+      }
     } finally {
       rootSizeInProgress = false;
     }
@@ -130,6 +144,15 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(cmd, refreshCmd, rootSizeItem);
 
   void refreshRootSize();
+
+  const refreshIntervalMs = 5 * 60 * 1000;
+  const refreshInterval = setInterval(() => {
+    void refreshRootSize();
+  }, refreshIntervalMs);
+
+  context.subscriptions.push({
+    dispose: () => clearInterval(refreshInterval),
+  });
 
   context.subscriptions.push(
     vscode.workspace.onDidChangeWorkspaceFolders(() => {

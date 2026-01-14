@@ -14,10 +14,10 @@ Extension VS Code qui ajoute un bouton dans la barre de titre de l'Explorer pour
 cd extension && npm run release
 ```
 
-Le .vsix est genere dans `release/` automatiquement (ex: `PKrevealinfinder-0.0.2.vsix`).
+Le .vsix est genere dans `release/` automatiquement (ex: `PKrevealinfinder-0.3.1.vsix`).
 
 ## Installation du .vsix (instance ouverte)
 
 - Commande palette: "Extensions: Install from VSIX..."
-- Selectionner le fichier `PKrevealinfinder-0.0.2.vsix` dans `release/`
+- Selectionner le fichier `PKrevealinfinder-0.3.1.vsix` dans `release/`
 - Recharger la fenetre
