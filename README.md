@@ -9,10 +9,21 @@ Extension VS Code qui ajoute un bouton dans la barre de titre de l'Explorer pour
 
 ## ✅ Fonctionnalites
 
-- 🧭 Reveal in Finder (macOS) : bouton dans la barre de titre de l'Explorer (en haut du panneau fichiers). Ouvre le fichier actif ou le dossier du workspace dans Finder.
-- 📦 Taille du dossier racine : indicateur en bas (status bar) avec rafraichissement automatique et clic pour forcer la mise a jour.
-- 🖼️ Project Icon : place un fichier `icon.*` (ex: `icon.png`) a la racine du workspace. L'icone s'affiche dans l'Explorer; sinon un message d'aide est affiche.
-- 🐙 Open GitHub Repository : bouton dans l'onglet Source Control. Ouvre le repo GitHub du projet; si plusieurs repos sont detectes, un choix est propose.
+🧭 Reveal in Finder (macOS)
+
+Bouton dans la barre de titre de l'Explorer (en haut du panneau fichiers). Ouvre le fichier actif ou le dossier du workspace dans Finder.
+
+📦 Taille du dossier racine
+
+Indicateur en bas (status bar) avec rafraichissement automatique et clic pour forcer la mise a jour.
+
+🖼️ Project Icon
+
+Place un fichier `icon.*` (ex: `icon.png`) a la racine du workspace. L'icone s'affiche dans l'Explorer; sinon un message d'aide est affiche.
+
+🐙 Open GitHub Repository
+
+Bouton dans l'onglet Source Control. Ouvre le repo GitHub du projet; si plusieurs repos sont detectes, un choix est propose.
 
 ## 📁 Arborescence
 
@@ -30,7 +41,7 @@ cd extension && npm run release
 
 Le .vsix est genere dans `release/` automatiquement (ex: `vs-pkvsconf-0.3.2.vsix`).
 
-Installation du .vsix :
+Depuis un .vsix (installation) :
 
 - Commande palette: "Extensions: Install from VSIX..."
 - Selectionner le fichier `vs-pkvsconf-0.3.2.vsix` dans `release/`
