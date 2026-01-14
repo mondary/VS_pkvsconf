@@ -227,6 +227,28 @@ class ExtensionTagsStore {
         return Array.from(names).sort((a, b) => a.localeCompare(b));
     }
 }
+const CATEGORY_COLORS_HEX = [
+    "#3794ff", // Bleu
+    "#89d185", // Vert
+    "#cca700", // Jaune/Or
+    "#bc3fbc", // Magenta
+    "#2bc7b4", // Cyan
+    "#f14c4c", // Rouge
+    "#e07a3a", // Orange
+    "#a970ff", // Violet
+    "#ff6b9d", // Rose
+    "#70c0ff" // Bleu clair
+];
+function createColoredCircleSvg(color) {
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="${color}"/></svg>`;
+}
+function getCategoryIconUri(categoryName, allCategories) {
+    const index = allCategories.indexOf(categoryName);
+    const color = CATEGORY_COLORS_HEX[index % CATEGORY_COLORS_HEX.length];
+    const svg = createColoredCircleSvg(color);
+    const encoded = Buffer.from(svg).toString("base64");
+    return vscode.Uri.parse(`data:image/svg+xml;base64,${encoded}`);
+}
 class ExtensionTagsViewProvider {
     constructor(store) {
         this.store = store;
@@ -251,9 +273,13 @@ class ExtensionTagsViewProvider {
             }
             const item = new vscode.TreeItem(element.tag, vscode.TreeItemCollapsibleState.Expanded);
             item.description = `(${count})`;
-            item.iconPath = element.tag === "— Sans tag —"
-                ? new vscode.ThemeIcon("question")
-                : new vscode.ThemeIcon("tag");
+            if (element.tag === "— Sans tag —") {
+                item.iconPath = new vscode.ThemeIcon("question");
+            }
+            else {
+                const allCategories = this.store.getAllTagNames();
+                item.iconPath = getCategoryIconUri(element.tag, allCategories);
+            }
             item.contextValue = "extensionTagGroup";
             return item;
         }
@@ -650,8 +676,17 @@ function activate(context) {
         }
         await vscode.commands.executeCommand("revealFileInOS", uri);
     });
+    const searchExtensionsCmd = vscode.commands.registerCommand("pkvsconf.searchExtensions", async () => {
+        const query = await vscode.window.showInputBox({
+            prompt: "Rechercher des extensions",
+            placeHolder: "Ex: python, prettier, docker..."
+        });
+        if (query) {
+            await vscode.commands.executeCommand("workbench.extensions.search", query);
+        }
+    });
     context.subscriptions.push(cmd, refreshCmd, openRepoCmd, rootSizeItem);
-    context.subscriptions.push(manageCategoryCmd);
+    context.subscriptions.push(manageCategoryCmd, searchExtensionsCmd);
     void refreshRootSize();
     const refreshIntervalMs = 5 * 60 * 1000;
     const refreshInterval = setInterval(() => {
