@@ -2,11 +2,16 @@
   "name": "PKrevealinfinder",
   "displayName": "PKrevealinfinder",
   "description": "Adds a toolbar button in Explorer to reveal the active file in Finder.",
-  "version": "0.0.1",
+  "version": "0.3.0",
   "publisher": "local",
+  "icon": "icon.png",
   "engines": { "vscode": "^1.85.0" },
   "categories": ["Other"],
-  "activationEvents": ["onCommand:revealInFinderButton.revealActive"],
+  "activationEvents": [
+    "onCommand:revealInFinderButton.revealActive",
+    "onCommand:revealInFinderButton.refreshRootSize",
+    "onStartupFinished"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
@@ -14,6 +19,11 @@
         "command": "revealInFinderButton.revealActive",
         "title": "Reveal Active File in Finder",
         "icon": "$(folder-opened)"
+      },
+      {
+        "command": "revealInFinderButton.refreshRootSize",
+        "title": "Refresh Root Folder Size",
+        "icon": "$(database)"
       }
     ],
     "menus": {
@@ -29,7 +39,7 @@
   "scripts": {
     "build": "tsc -p .",
     "watch": "tsc -w -p .",
-    "package": "mkdir -p ../releases && vsce package -o ../releases/${npm_package_name}-${npm_package_version}.vsix",
+    "package": "mkdir -p ../release && vsce package -o ../release/${npm_package_name}-${npm_package_version}.vsix",
     "release": "npm run build && npm run package"
   },
   "devDependencies": {

@@ -6,7 +6,7 @@ Extension VS Code qui ajoute un bouton dans la barre de titre de l'Explorer pour
 
 - `extension/` : code de l'extension, build, scripts
 - `openspec/` : specs OpenSpec
-- `releases/` : packages .vsix generes
+- `release/` : packages .vsix generes
 
 ## Build et package (une seule commande)
 
@@ -14,10 +14,10 @@ Extension VS Code qui ajoute un bouton dans la barre de titre de l'Explorer pour
 cd extension && npm run release
 ```
 
-Le .vsix est genere dans `releases/`.
+Le .vsix est genere dans `release/` automatiquement (ex: `PKrevealinfinder-0.0.2.vsix`).
 
 ## Installation du .vsix (instance ouverte)
 
 - Commande palette: "Extensions: Install from VSIX..."
-- Selectionner le fichier dans `releases/`
+- Selectionner le fichier `PKrevealinfinder-0.0.2.vsix` dans `release/`
 - Recharger la fenetre

@@ -25,7 +25,7 @@ Use the current layout as the preferred project structure:
 .
 ├─ extension/   # VS Code extension source, build output, and scripts
 ├─ openspec/    # OpenSpec specs and changes
-├─ releases/    # Generated .vsix packages
+├─ release/     # Generated .vsix packages
 ├─ README.md
 └─ .gitignore
 ```
