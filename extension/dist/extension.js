@@ -840,8 +840,7 @@ function activate(context) {
     rootSizeItem.text = "Root size: --";
     rootSizeItem.tooltip = "Click to refresh root folder size";
     rootSizeItem.command = "revealInFinderButton.refreshRootSize";
-    rootSizeItem.backgroundColor = new vscode.ThemeColor("pkvsconf.rootSizeStatusBarItem.background");
-    rootSizeItem.color = new vscode.ThemeColor("pkvsconf.rootSizeStatusBarItem.foreground");
+    rootSizeItem.backgroundColor = new vscode.ThemeColor("statusBarItem.warningBackground");
     rootSizeItem.show();
     let rootSizeInProgress = false;
     const refreshRootSize = async () => {

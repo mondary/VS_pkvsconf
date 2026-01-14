@@ -18,7 +18,7 @@ Extension VS Code qui ajoute un bouton dans la barre de titre de l'Explorer pour
 
 - 🖼️ Project Icon
 
-  Place un fichier `icon.*` (ex: `icon.png`) a la racine du workspace. L'icone s'affiche dans l'Explorer; sinon un message d'aide est affiche.
+  Place un fichier `icon.*` (ex: `icon.png`) a la racine du workspace. La vue est ouverte par defaut dans l'Explorer; sinon un message d'aide est affiche.
 
 - 🐙 Open GitHub Repository
 

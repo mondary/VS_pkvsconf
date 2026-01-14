@@ -1055,10 +1055,7 @@ export function activate(context: vscode.ExtensionContext) {
   rootSizeItem.tooltip = "Click to refresh root folder size";
   rootSizeItem.command = "revealInFinderButton.refreshRootSize";
   rootSizeItem.backgroundColor = new vscode.ThemeColor(
-    "pkvsconf.rootSizeStatusBarItem.background"
-  );
-  rootSizeItem.color = new vscode.ThemeColor(
-    "pkvsconf.rootSizeStatusBarItem.foreground"
+    "statusBarItem.warningBackground"
   );
   rootSizeItem.show();
 
