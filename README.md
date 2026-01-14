@@ -1,6 +1,10 @@
 # PKrevealinfinder
 
-Extension VS Code qui ajoute un bouton dans la barre de titre de l'Explorer pour reveler le fichier actif dans Finder (macOS).
+Extension VS Code qui ajoute un bouton dans la barre de titre de l'Explorer pour reveler le fichier actif dans Finder (macOS), et un panneau "Project Icon" dans l'Explorer.
+
+## Project Icon
+
+Place un fichier `icon.*` (ex: `icon.png`) a la racine du workspace pour afficher l'icone dans l'Explorer. Sans icone, un message d'aide est affiche.
 
 ## Arborescence
 

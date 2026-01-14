@@ -2,14 +2,20 @@
   "name": "PKrevealinfinder",
   "displayName": "PKrevealinfinder",
   "description": "Adds a toolbar button in Explorer to reveal the active file in Finder.",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "publisher": "local",
   "icon": "icon.png",
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "file:.."
+  },
   "engines": { "vscode": "^1.85.0" },
   "categories": ["Other"],
   "activationEvents": [
     "onCommand:revealInFinderButton.revealActive",
     "onCommand:revealInFinderButton.refreshRootSize",
+    "onView:projectIconView",
     "onStartupFinished"
   ],
   "main": "./dist/extension.js",
@@ -26,6 +32,15 @@
         "icon": "$(database)"
       }
     ],
+    "views": {
+      "explorer": [
+        {
+          "id": "projectIconView",
+          "name": "Project Icon",
+          "type": "webview"
+        }
+      ]
+    },
     "menus": {
       "view/title": [
         {

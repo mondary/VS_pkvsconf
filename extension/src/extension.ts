@@ -4,6 +4,8 @@ import { Dirent } from "fs";
 import * as path from "path";
 
 const SIZE_UNITS = ["KB", "MB", "GB", "TB"] as const;
+const ICON_PREFIX = "icon.";
+const VIEW_ID = "projectIconView";
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) {
@@ -20,6 +22,140 @@ function formatBytes(bytes: number): string {
 
   const precision = size < 10 ? 1 : 0;
   return `${size.toFixed(precision)} ${SIZE_UNITS[unitIndex]}`;
+}
+
+class ProjectIconViewProvider implements vscode.WebviewViewProvider {
+  private view: vscode.WebviewView | undefined;
+  private workspaceRoot: string | undefined;
+  private fallbackMessage = "Place a file named icon.* on root project";
+
+  setWorkspace(root: string | undefined): void {
+    this.workspaceRoot = root;
+    this.fallbackMessage = "Place a file named icon.* on root project";
+
+    if (this.view) {
+      this.view.webview.options = {
+        enableScripts: false,
+        localResourceRoots: root ? [vscode.Uri.file(root)] : []
+      };
+    }
+  }
+
+  refresh(): void {
+    if (this.view) {
+      void this.render();
+    }
+  }
+
+  resolveWebviewView(view: vscode.WebviewView): void {
+    this.view = view;
+    view.webview.options = {
+      enableScripts: false,
+      localResourceRoots: this.workspaceRoot
+        ? [vscode.Uri.file(this.workspaceRoot)]
+        : []
+    };
+
+    void this.render();
+  }
+
+  private async render(): Promise<void> {
+    if (!this.view) {
+      return;
+    }
+
+    const iconPath = this.workspaceRoot
+      ? await findIconPath(this.workspaceRoot)
+      : undefined;
+
+    this.view.webview.html = buildHtml(
+      this.view.webview,
+      iconPath,
+      this.fallbackMessage
+    );
+  }
+}
+
+async function findIconPath(root: string): Promise<string | undefined> {
+  try {
+    const entries = await fs.readdir(root, { withFileTypes: true });
+    const matches = entries
+      .filter((entry) => entry.isFile())
+      .map((entry) => entry.name)
+      .filter((name) => name.toLowerCase().startsWith(ICON_PREFIX))
+      .sort((a, b) => a.localeCompare(b));
+
+    if (matches.length === 0) {
+      return undefined;
+    }
+
+    return path.join(root, matches[0]);
+  } catch {
+    return undefined;
+  }
+}
+
+function buildHtml(
+  webview: vscode.Webview,
+  iconPath: string | undefined,
+  fallbackMessage: string
+): string {
+  const bodyContent = iconPath
+    ? `<img class="icon" src="${webview.asWebviewUri(
+        vscode.Uri.file(iconPath)
+      )}" alt="Project icon" />`
+    : `<div class="fallback">${escapeHtml(fallbackMessage)}</div>`;
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    :root {
+      color-scheme: light dark;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    .icon {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      padding: 12px;
+      box-sizing: border-box;
+    }
+
+    .fallback {
+      font-size: 20px;
+      font-weight: 600;
+      text-align: center;
+      padding: 12px;
+      word-break: break-word;
+    }
+  </style>
+</head>
+<body>
+  ${bodyContent}
+</body>
+</html>`;
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 async function getDirectorySizeBytes(
@@ -60,6 +196,45 @@ async function getDirectorySizeBytes(
 }
 
 export function activate(context: vscode.ExtensionContext) {
+  const provider = new ProjectIconViewProvider();
+  let watcher: vscode.FileSystemWatcher | undefined;
+
+  const updateWorkspace = () => {
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    const workspaceRoot = workspaceFolder?.uri.fsPath;
+    provider.setWorkspace(workspaceRoot);
+    provider.refresh();
+
+    if (watcher) {
+      watcher.dispose();
+      watcher = undefined;
+    }
+
+    if (!workspaceRoot) {
+      return;
+    }
+
+    watcher = vscode.workspace.createFileSystemWatcher(
+      new vscode.RelativePattern(workspaceRoot, "icon.*")
+    );
+
+    watcher.onDidCreate(() => provider.refresh());
+    watcher.onDidChange(() => provider.refresh());
+    watcher.onDidDelete(() => provider.refresh());
+
+    context.subscriptions.push(watcher);
+  };
+
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider(VIEW_ID, provider)
+  );
+
+  updateWorkspace();
+
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeWorkspaceFolders(() => updateWorkspace())
+  );
+
   const rootSizeItem = vscode.window.createStatusBarItem(
     vscode.StatusBarAlignment.Left,
     100

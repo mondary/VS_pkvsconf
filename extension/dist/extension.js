@@ -6,6 +6,8 @@ const vscode = require("vscode");
 const fs = require("fs/promises");
 const path = require("path");
 const SIZE_UNITS = ["KB", "MB", "GB", "TB"];
+const ICON_PREFIX = "icon.";
+const VIEW_ID = "projectIconView";
 function formatBytes(bytes) {
     if (bytes < 1024) {
         return `${bytes} B`;
@@ -19,14 +21,125 @@ function formatBytes(bytes) {
     const precision = size < 10 ? 1 : 0;
     return `${size.toFixed(precision)} ${SIZE_UNITS[unitIndex]}`;
 }
+class ProjectIconViewProvider {
+    constructor() {
+        this.fallbackMessage = "Place a file named icon.* on root project";
+    }
+    setWorkspace(root) {
+        this.workspaceRoot = root;
+        this.fallbackMessage = "Place a file named icon.* on root project";
+        if (this.view) {
+            this.view.webview.options = {
+                enableScripts: false,
+                localResourceRoots: root ? [vscode.Uri.file(root)] : []
+            };
+        }
+    }
+    refresh() {
+        if (this.view) {
+            void this.render();
+        }
+    }
+    resolveWebviewView(view) {
+        this.view = view;
+        view.webview.options = {
+            enableScripts: false,
+            localResourceRoots: this.workspaceRoot
+                ? [vscode.Uri.file(this.workspaceRoot)]
+                : []
+        };
+        void this.render();
+    }
+    async render() {
+        if (!this.view) {
+            return;
+        }
+        const iconPath = this.workspaceRoot
+            ? await findIconPath(this.workspaceRoot)
+            : undefined;
+        this.view.webview.html = buildHtml(this.view.webview, iconPath, this.fallbackMessage);
+    }
+}
+async function findIconPath(root) {
+    try {
+        const entries = await fs.readdir(root, { withFileTypes: true });
+        const matches = entries
+            .filter((entry) => entry.isFile())
+            .map((entry) => entry.name)
+            .filter((name) => name.toLowerCase().startsWith(ICON_PREFIX))
+            .sort((a, b) => a.localeCompare(b));
+        if (matches.length === 0) {
+            return undefined;
+        }
+        return path.join(root, matches[0]);
+    }
+    catch {
+        return undefined;
+    }
+}
+function buildHtml(webview, iconPath, fallbackMessage) {
+    const bodyContent = iconPath
+        ? `<img class="icon" src="${webview.asWebviewUri(vscode.Uri.file(iconPath))}" alt="Project icon" />`
+        : `<div class="fallback">${escapeHtml(fallbackMessage)}</div>`;
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    :root {
+      color-scheme: light dark;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    .icon {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      padding: 12px;
+      box-sizing: border-box;
+    }
+
+    .fallback {
+      font-size: 20px;
+      font-weight: 600;
+      text-align: center;
+      padding: 12px;
+      word-break: break-word;
+    }
+  </style>
+</head>
+<body>
+  ${bodyContent}
+</body>
+</html>`;
+}
+function escapeHtml(value) {
+    return value
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+}
 async function getDirectorySizeBytes(rootPath) {
     let total = 0;
+    let hadError = false;
     let entries;
     try {
         entries = await fs.readdir(rootPath, { withFileTypes: true });
     }
     catch {
-        return 0;
+        return { total: 0, hadError: true };
     }
     for (const entry of entries) {
         const entryPath = path.join(rootPath, entry.name);
@@ -35,7 +148,9 @@ async function getDirectorySizeBytes(rootPath) {
                 continue;
             }
             if (entry.isDirectory()) {
-                total += await getDirectorySizeBytes(entryPath);
+                const result = await getDirectorySizeBytes(entryPath);
+                total += result.total;
+                hadError = hadError || result.hadError;
             }
             else if (entry.isFile()) {
                 const stat = await fs.stat(entryPath);
@@ -43,12 +158,35 @@ async function getDirectorySizeBytes(rootPath) {
             }
         }
         catch {
-            continue;
+            hadError = true;
         }
     }
-    return total;
+    return { total, hadError };
 }
 function activate(context) {
+    const provider = new ProjectIconViewProvider();
+    let watcher;
+    const updateWorkspace = () => {
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        const workspaceRoot = workspaceFolder?.uri.fsPath;
+        provider.setWorkspace(workspaceRoot);
+        provider.refresh();
+        if (watcher) {
+            watcher.dispose();
+            watcher = undefined;
+        }
+        if (!workspaceRoot) {
+            return;
+        }
+        watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(workspaceRoot, "icon.*"));
+        watcher.onDidCreate(() => provider.refresh());
+        watcher.onDidChange(() => provider.refresh());
+        watcher.onDidDelete(() => provider.refresh());
+        context.subscriptions.push(watcher);
+    };
+    context.subscriptions.push(vscode.window.registerWebviewViewProvider(VIEW_ID, provider));
+    updateWorkspace();
+    context.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(() => updateWorkspace()));
     const rootSizeItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
     rootSizeItem.text = "Root size: --";
     rootSizeItem.tooltip = "Click to refresh root folder size";
@@ -65,13 +203,21 @@ function activate(context) {
             rootSizeItem.tooltip = "No workspace folder open";
             return;
         }
+        if (workspaceUri.scheme !== "file") {
+            rootSizeItem.text = "Root size: unsupported";
+            rootSizeItem.tooltip = "Not available on remote or virtual workspaces";
+            return;
+        }
         rootSizeInProgress = true;
         rootSizeItem.text = "Root size: calculating...";
         rootSizeItem.tooltip = `Root: ${workspaceUri.fsPath}`;
         try {
-            const sizeBytes = await getDirectorySizeBytes(workspaceUri.fsPath);
-            const formatted = formatBytes(sizeBytes);
+            const result = await getDirectorySizeBytes(workspaceUri.fsPath);
+            const formatted = formatBytes(result.total);
             rootSizeItem.text = `Root size: ${formatted}`;
+            if (result.hadError) {
+                rootSizeItem.tooltip = `Root: ${workspaceUri.fsPath}\nSome folders could not be read.`;
+            }
         }
         finally {
             rootSizeInProgress = false;
@@ -95,6 +241,13 @@ function activate(context) {
     });
     context.subscriptions.push(cmd, refreshCmd, rootSizeItem);
     void refreshRootSize();
+    const refreshIntervalMs = 5 * 60 * 1000;
+    const refreshInterval = setInterval(() => {
+        void refreshRootSize();
+    }, refreshIntervalMs);
+    context.subscriptions.push({
+        dispose: () => clearInterval(refreshInterval),
+    });
     context.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(() => {
         void refreshRootSize();
     }));
