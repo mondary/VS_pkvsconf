@@ -2,7 +2,7 @@
   "name": "vs-pkvsconf",
   "displayName": "VS_pkvsconf",
   "description": "Adds a toolbar button in Explorer to reveal the active file in Finder.",
-  "version": "0.3.27",
+  "version": "0.3.30",
   "publisher": "Cmondary",
   "icon": "icon.png",
   "license": "UNLICENSED",
@@ -24,6 +24,7 @@
     "onCommand:pkvsconf.createTagForExtension",
     "onCommand:pkvsconf.removeTagFromExtension",
     "onCommand:pkvsconf.regenerateWorkspaceTitlebarColor",
+    "onCommand:pkvsconf.previewActivePage",
     "onView:projectIconView",
     "onView:extensionTagsView",
     "onStartupFinished"
@@ -69,6 +70,11 @@
         "command": "pkvsconf.regenerateWorkspaceTitlebarColor",
         "title": "Regenerer la couleur de la title bar",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "pkvsconf.previewActivePage",
+        "title": "Preview de la page en cours",
+        "icon": "$(open-preview)"
       }
     ],
     "colors": [

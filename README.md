@@ -5,7 +5,7 @@
 
 ✨ Extension VS Code simple, claire et sympa pour booster ton Explorer.
 
-Extension VS Code qui ajoute un bouton dans la barre de titre de l'Explorer pour reveler le fichier actif dans Finder (macOS), un indicateur de taille du dossier racine, et un panneau "Project Icon" dans l'Explorer.
+Extension VS Code qui ajoute plusieurs fonctionnalités utiles : bouton pour reveler le fichier actif dans Finder (macOS), indicateur de taille du dossier racine, panneau "Project Icon", preview de pages HTML/PHP avec serveur automatique, gestion de tags d'extensions, et personnalisation de la couleur de la title bar par workspace.
 
 ## ✅ Fonctionnalites
 
@@ -29,6 +29,14 @@ Extension VS Code qui ajoute un bouton dans la barre de titre de l'Explorer pour
 
   Clic droit sur une extension pour "Add Tag" ou "Create Tag". Une vue "Extension Tags" apparait dans l'Explorer avec des sections par tag (collapse/expand).
 
+- 👁️ Preview de la page en cours
+
+  Bouton dans la barre de statut (status bar) en bas. Ouvre une preview de la page HTML/PHP/etc actuellement ouverte dans un nouvel onglet (remplace l'onglet actif). Pour les fichiers PHP, un serveur PHP local est lancé automatiquement. Le serveur s'arrête automatiquement quand l'onglet de preview est fermé.
+
+- 🎨 Couleur de title bar par workspace
+
+  Une couleur est assignee automatiquement a chaque workspace pour distinguer les fenetres. La couleur est persistante et regenerable via le bouton "Title Bar" dans la status bar ou la commande palette "Regenerer la couleur de la title bar". Chaque clic génère une nouvelle couleur aléatoire.
+
 ## 📁 Arborescence
 
 - `extension/` : code de l'extension, build, scripts
@@ -37,21 +45,50 @@ Extension VS Code qui ajoute un bouton dans la barre de titre de l'Explorer pour
 
 ## 🛠️ Build, package et installation (.vsix)
 
+### Build local
+
 Depuis les sources (build + package) :
 
 ```bash
 cd extension && npm run release
 ```
 
-Le .vsix est genere dans `release/` automatiquement (ex: `vs-pkvsconf-0.3.23.vsix`).
+Le .vsix est genere dans `release/` automatiquement (ex: `vs-pkvsconf-0.3.30.vsix`).
 
-Depuis un .vsix (installation) :
+### Installation depuis .vsix
 
 - Commande palette (macOS: Cmd+Shift+P, Windows/Linux: Ctrl+Shift+P): "Extensions: Install from VSIX..."
-- Selectionner le fichier `vs-pkvsconf-0.3.23.vsix` dans `release/`
+- Selectionner le fichier `vs-pkvsconf-0.3.30.vsix` dans `release/`
 - Recharger la fenetre
 
+### Publication automatique vers VS Code Marketplace
+
+L'extension peut être publiée automatiquement vers le VS Code Marketplace via GitHub Actions :
+
+1. **Créer un Personal Access Token (PAT)** :
+   - Aller sur https://marketplace.visualstudio.com/manage
+   - Créer un nouveau token (ou utiliser un existant)
+   - Copier le token
+
+2. **Ajouter le token comme secret GitHub** :
+   - Aller dans les paramètres du repo GitHub → Secrets and variables → Actions
+   - Ajouter un nouveau secret nommé `VSCE_PAT` avec la valeur du token
+
+3. **Publier** :
+   - **Option A** : Créer une release GitHub (le workflow se déclenche automatiquement)
+   - **Option B** : Utiliser "Run workflow" dans l'onglet Actions de GitHub
+
+Le workflow build automatiquement, package et publie l'extension vers le marketplace.
+
 ## 🧾 Release Notes
+
+### 0.3.30
+
+- 🎨 Ajout d'un bouton dans la status bar pour changer la couleur de la title bar (en plus de la commande palette).
+
+### 0.3.29
+
+- 👁️ Ajout de la fonctionnalité Preview de la page en cours. Bouton dans la status bar pour ouvrir une preview dans un nouvel onglet. Support PHP avec serveur automatique.
 
 ### 0.3.23
 

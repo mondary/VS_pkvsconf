@@ -2,6 +2,8 @@ import * as vscode from "vscode";
 import * as fs from "fs/promises";
 import { Dirent } from "fs";
 import * as path from "path";
+import * as cp from "child_process";
+import * as net from "net";
 
 const SIZE_UNITS = ["KB", "MB", "GB", "TB"] as const;
 const ICON_PREFIX = "icon.";
@@ -1059,6 +1061,24 @@ export function activate(context: vscode.ExtensionContext) {
   );
   rootSizeItem.show();
 
+  const previewItem = vscode.window.createStatusBarItem(
+    vscode.StatusBarAlignment.Left,
+    99
+  );
+  previewItem.text = "$(open-preview) Preview";
+  previewItem.tooltip = "Lancer une preview de la page en cours";
+  previewItem.command = "pkvsconf.previewActivePage";
+  previewItem.show();
+
+  const titlebarColorItem = vscode.window.createStatusBarItem(
+    vscode.StatusBarAlignment.Left,
+    98
+  );
+  titlebarColorItem.text = "$(symbol-color) Title Bar";
+  titlebarColorItem.tooltip = "Changer la couleur de la barre de titre (aléatoire)";
+  titlebarColorItem.command = "pkvsconf.regenerateWorkspaceTitlebarColor";
+  titlebarColorItem.show();
+
   let rootSizeInProgress = false;
 
   const refreshRootSize = async () => {
@@ -1210,11 +1230,207 @@ export function activate(context: vscode.ExtensionContext) {
     }
   );
 
-  context.subscriptions.push(cmd, refreshCmd, openRepoCmd, rootSizeItem);
+  const previewActivePageCmd = vscode.commands.registerCommand(
+    "pkvsconf.previewActivePage",
+    async () => {
+      const activeEditorUri = vscode.window.activeTextEditor?.document.uri;
+      const activeTabUri = (
+        vscode.window.tabGroups.activeTabGroup.activeTab?.input as {
+          uri?: vscode.Uri;
+        } | null
+      )?.uri;
+      
+      const uri = activeEditorUri ?? activeTabUri;
+      
+      if (!uri) {
+        vscode.window.showInformationMessage(
+          "Aucun fichier ouvert pour preview."
+        );
+        return;
+      }
+      
+      // Créer un WebviewPanel (onglet) pour la preview
+      const fileName = path.basename(uri.fsPath);
+      const fileExt = path.extname(uri.fsPath).toLowerCase();
+      const isPhpFile = fileExt === '.php';
+      
+      const panel = vscode.window.createWebviewPanel(
+        'pagePreview',
+        `Preview: ${fileName}`,
+        vscode.ViewColumn.Active,
+        {
+          enableScripts: true,
+          retainContextWhenHidden: true
+        }
+      );
+      
+      let phpServerProcess: cp.ChildProcess | null = null;
+      let phpServerPort: number | null = null;
+      
+      // Nettoyer le serveur PHP quand le panneau est fermé
+      panel.onDidDispose(() => {
+        if (phpServerProcess) {
+          phpServerProcess.kill();
+          phpServerProcess = null;
+        }
+      });
+      
+      try {
+        if (isPhpFile && uri.scheme === 'file') {
+          // Lancer un serveur PHP pour les fichiers PHP
+          phpServerPort = await findAvailablePort(8000, 8100);
+          if (!phpServerPort) {
+            panel.webview.html = getErrorWebviewContent(
+              "Impossible de trouver un port disponible pour le serveur PHP."
+            );
+            return;
+          }
+          
+          const fileDir = path.dirname(uri.fsPath);
+          const fileNameOnly = path.basename(uri.fsPath);
+          const serverUrl = `http://localhost:${phpServerPort}/${fileNameOnly}`;
+          
+          // Lancer le serveur PHP
+          phpServerProcess = cp.spawn('php', ['-S', `localhost:${phpServerPort}`, '-t', fileDir], {
+            cwd: fileDir,
+            stdio: 'pipe'
+          });
+          
+          phpServerProcess.on('error', (error) => {
+            panel.webview.html = getErrorWebviewContent(
+              `Erreur lors du lancement du serveur PHP: ${error.message}. Assurez-vous que PHP est installé et dans votre PATH.`
+            );
+          });
+          
+          // Attendre un peu que le serveur démarre
+          await new Promise(resolve => setTimeout(resolve, 500));
+          
+          // Vérifier si le processus est toujours actif
+          if (phpServerProcess && phpServerProcess.killed) {
+            panel.webview.html = getErrorWebviewContent(
+              "Le serveur PHP n'a pas pu démarrer. Vérifiez que PHP est installé."
+            );
+            return;
+          }
+          
+          // Afficher l'URL du serveur dans la webview
+          panel.webview.html = getPhpServerWebviewContent(serverUrl);
+        } else {
+          // Pour les autres fichiers, afficher le contenu directement
+          const document = await vscode.workspace.openTextDocument(uri);
+          const content = document.getText();
+          
+          // Afficher dans la webview
+          panel.webview.html = getWebviewContent(content);
+        }
+      } catch (error) {
+        panel.webview.html = getErrorWebviewContent(
+          `Erreur lors de la lecture du fichier: ${error}`
+        );
+      }
+    }
+  );
+  
+  function findAvailablePort(startPort: number, endPort: number): Promise<number | null> {
+    return new Promise((resolve) => {
+      let currentPort = startPort;
+      
+      const tryPort = () => {
+        if (currentPort > endPort) {
+          resolve(null);
+          return;
+        }
+        
+        const server = net.createServer();
+        server.listen(currentPort, () => {
+          server.once('close', () => {
+            resolve(currentPort);
+          });
+          server.close();
+        });
+        server.on('error', () => {
+          currentPort++;
+          tryPort();
+        });
+      };
+      
+      tryPort();
+    });
+  }
+  
+  function getWebviewContent(content: string): string {
+    return `<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    }
+  </style>
+</head>
+<body>
+  ${content}
+</body>
+</html>`;
+  }
+  
+  function getErrorWebviewContent(errorMessage: string): string {
+    return `<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      color: var(--vscode-errorForeground);
+    }
+  </style>
+</head>
+<body>
+  <h1>Erreur de preview</h1>
+  <p>${errorMessage}</p>
+</body>
+</html>`;
+  }
+  
+  function getPhpServerWebviewContent(serverUrl: string): string {
+    return `<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    }
+    iframe {
+      width: 100%;
+      height: 100vh;
+      border: none;
+    }
+  </style>
+</head>
+<body>
+  <iframe src="${serverUrl}" sandbox="allow-same-origin allow-scripts allow-forms allow-popups"></iframe>
+</body>
+</html>`;
+  }
+
+  context.subscriptions.push(cmd, refreshCmd, openRepoCmd, rootSizeItem, previewItem, titlebarColorItem);
   context.subscriptions.push(
     manageCategoryCmd,
     searchExtensionsCmd,
-    regenerateTitlebarColorCmd
+    regenerateTitlebarColorCmd,
+    previewActivePageCmd
   );
 
   void refreshRootSize();
