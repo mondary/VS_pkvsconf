@@ -61,24 +61,22 @@ Le .vsix est genere dans `release/` automatiquement (ex: `vs-pkvsconf-0.3.30.vsi
 - Selectionner le fichier `vs-pkvsconf-0.3.30.vsix` dans `release/`
 - Recharger la fenetre
 
-### Publication automatique vers VS Code Marketplace
+### Publication vers VS Code Marketplace
 
-L'extension peut être publiée automatiquement vers le VS Code Marketplace via GitHub Actions :
+Voir le fichier [PUBLISH.md](PUBLISH.md) pour les instructions détaillées.
 
-1. **Créer un Personal Access Token (PAT)** :
-   - Aller sur https://marketplace.visualstudio.com/manage
-   - Créer un nouveau token (ou utiliser un existant)
-   - Copier le token
+**Méthode simple (recommandée)** :
+```bash
+cd extension
+npm install -g @vscode/vsce
+vsce login
+npm run build
+vsce publish
+```
 
-2. **Ajouter le token comme secret GitHub** :
-   - Aller dans les paramètres du repo GitHub → Secrets and variables → Actions
-   - Ajouter un nouveau secret nommé `VSCE_PAT` avec la valeur du token
-
-3. **Publier** :
-   - **Option A** : Créer une release GitHub (le workflow se déclenche automatiquement)
-   - **Option B** : Utiliser "Run workflow" dans l'onglet Actions de GitHub
-
-Le workflow build automatiquement, package et publie l'extension vers le marketplace.
+**Publication automatique via GitHub Actions** :
+- Configurer un Personal Access Token (voir PUBLISH.md)
+- Créer une release GitHub ou utiliser "Run workflow"
 
 ## 🧾 Release Notes
 

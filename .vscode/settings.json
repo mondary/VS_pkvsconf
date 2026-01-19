@@ -7,5 +7,7 @@
         "titleBar.inactiveForeground": "#FFFFFF",
         "titleBar.border": "#871a39"
     },
-    "peacock.color": "#d336a0"
+    "peacock.color": "#d336a0",
+    "snyk.advanced.organization": "faaada6d-2cdb-4073-a3cb-e1fc0b655e54",
+    "snyk.advanced.autoSelectOrganization": true
 }

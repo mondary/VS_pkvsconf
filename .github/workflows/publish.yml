@@ -39,4 +39,12 @@ jobs:
         working-directory: ./extension
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
-        run: vsce publish -p $VSCE_PAT
+        run: |
+          if [ -z "$VSCE_PAT" ]; then
+            echo "⚠️  VSCE_PAT secret not set. Skipping publish."
+            echo "To enable publishing, add a Personal Access Token as VSCE_PAT secret in GitHub repository settings."
+            echo "Get your token from: https://marketplace.visualstudio.com/manage"
+            exit 0
+          else
+            vsce publish -p $VSCE_PAT
+          fi

@@ -2,7 +2,7 @@
   "name": "vs-pkvsconf",
   "displayName": "VS_pkvsconf",
   "description": "Adds a toolbar button in Explorer to reveal the active file in Finder.",
-  "version": "0.3.30",
+  "version": "0.3.32",
   "publisher": "Cmondary",
   "icon": "icon.png",
   "license": "UNLICENSED",
@@ -25,6 +25,8 @@
     "onCommand:pkvsconf.removeTagFromExtension",
     "onCommand:pkvsconf.regenerateWorkspaceTitlebarColor",
     "onCommand:pkvsconf.previewActivePage",
+    "onCommand:pkvsconf.showExposedSecrets",
+    "onCommand:pkvsconf.rescanSecrets",
     "onView:projectIconView",
     "onView:extensionTagsView",
     "onStartupFinished"
@@ -75,6 +77,16 @@
         "command": "pkvsconf.previewActivePage",
         "title": "Preview de la page en cours",
         "icon": "$(open-preview)"
+      },
+      {
+        "command": "pkvsconf.showExposedSecrets",
+        "title": "Afficher les secrets exposés",
+        "icon": "$(shield)"
+      },
+      {
+        "command": "pkvsconf.rescanSecrets",
+        "title": "Rescanner les secrets",
+        "icon": "$(refresh)"
       }
     ],
     "colors": [
