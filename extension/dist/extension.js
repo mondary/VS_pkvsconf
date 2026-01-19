@@ -312,10 +312,10 @@ class SecretScanner {
             this.statusBarItem.tooltip = "Aucun secret exposé détecté";
         }
         else {
-            // Secrets détectés = ALERTE ROUGE VISIBLE
-            this.statusBarItem.text = `🚨 SECRETS: ${totalMatches} 🚨`;
+            // Secrets détectés = ALERTE VISIBLE
+            this.statusBarItem.text = `🔴 SECRETS: ${totalMatches} 🔴`;
             this.statusBarItem.backgroundColor = new vscode.ThemeColor("statusBarItem.errorBackground");
-            this.statusBarItem.color = "#FF0000";
+            this.statusBarItem.color = new vscode.ThemeColor("errorForeground");
             this.statusBarItem.tooltip = `⚠️ ${totalMatches} secret(s) exposé(s) dans ${fileCount} fichier(s) - CLIQUEZ POUR VOIR`;
         }
     }
