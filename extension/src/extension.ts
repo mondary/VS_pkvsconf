@@ -807,9 +807,20 @@ interface GitRemote {
   pushUrl?: string;
 }
 
+interface GitChange {
+  uri: vscode.Uri;
+  status: number;
+}
+
+interface GitRepositoryState {
+  remotes: GitRemote[];
+  indexChanges: GitChange[];  // Fichiers staged
+}
+
 interface GitRepository {
   rootUri: vscode.Uri;
-  state: { remotes: GitRemote[] };
+  state: GitRepositoryState;
+  inputBox: { value: string };
 }
 
 interface GitApi {
@@ -818,6 +829,142 @@ interface GitApi {
 
 interface GitExtension {
   getAPI(version: number): GitApi;
+}
+
+// Interface pour les résultats de scan des fichiers staged
+interface StagedFileSecretResult {
+  filePath: string;
+  relativePath: string;
+  secrets: SecretMatch[];
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PRE-COMMIT SECRET CHECK
+// ═══════════════════════════════════════════════════════════════════════════════
+
+async function getGitApi(): Promise<GitApi | null> {
+  const gitExtension = vscode.extensions.getExtension<GitExtension>("vscode.git");
+  if (!gitExtension) {
+    return null;
+  }
+  return gitExtension.isActive
+    ? gitExtension.exports.getAPI(1)
+    : (await gitExtension.activate()).getAPI(1);
+}
+
+async function scanStagedFilesForSecrets(): Promise<{
+  hasSecrets: boolean;
+  files: StagedFileSecretResult[];
+  workspaceRoot: string | undefined;
+}> {
+  const gitApi = await getGitApi();
+  if (!gitApi || gitApi.repositories.length === 0) {
+    return { hasSecrets: false, files: [], workspaceRoot: undefined };
+  }
+
+  const repo = gitApi.repositories[0];
+  const workspaceRoot = repo.rootUri.fsPath;
+  const stagedChanges = repo.state.indexChanges;
+
+  if (!stagedChanges || stagedChanges.length === 0) {
+    return { hasSecrets: false, files: [], workspaceRoot };
+  }
+
+  const filesWithSecrets: StagedFileSecretResult[] = [];
+
+  for (const change of stagedChanges) {
+    const filePath = change.uri.fsPath;
+
+    // Ignorer certains fichiers
+    if (shouldSkipFile(filePath)) {
+      continue;
+    }
+
+    // Ignorer les fichiers trop volumineux
+    try {
+      const stat = await fs.stat(filePath);
+      if (stat.size > 1024 * 1024) {
+        continue;
+      }
+    } catch {
+      continue;
+    }
+
+    try {
+      const content = await fs.readFile(filePath, "utf8");
+      const secrets = findSecretsInContent(content);
+
+      if (secrets.length > 0) {
+        filesWithSecrets.push({
+          filePath,
+          relativePath: path.relative(workspaceRoot, filePath),
+          secrets,
+        });
+      }
+    } catch {
+      // Fichier illisible (binaire, permissions, etc.)
+    }
+  }
+
+  return {
+    hasSecrets: filesWithSecrets.length > 0,
+    files: filesWithSecrets,
+    workspaceRoot,
+  };
+}
+
+async function addFilesToGitignore(
+  workspaceRoot: string,
+  filePaths: string[]
+): Promise<void> {
+  const gitignorePath = path.join(workspaceRoot, ".gitignore");
+
+  let existingContent = "";
+  try {
+    existingContent = await fs.readFile(gitignorePath, "utf8");
+  } catch {
+    // Le fichier n'existe pas, on va le créer
+  }
+
+  const existingLines = new Set(
+    existingContent.split(/\r?\n/).map((line) => line.trim())
+  );
+
+  const newEntries: string[] = [];
+  for (const filePath of filePaths) {
+    const relativePath = path.relative(workspaceRoot, filePath);
+    if (!existingLines.has(relativePath)) {
+      newEntries.push(relativePath);
+    }
+  }
+
+  if (newEntries.length === 0) {
+    return;
+  }
+
+  const separator = existingContent.endsWith("\n") || existingContent === "" ? "" : "\n";
+  const comment = existingContent === "" ? "" : "\n# Fichiers avec secrets (ajoutés automatiquement)\n";
+  const newContent = existingContent + separator + comment + newEntries.join("\n") + "\n";
+
+  await fs.writeFile(gitignorePath, newContent, "utf8");
+}
+
+async function unstageFiles(filePaths: string[]): Promise<void> {
+  for (const filePath of filePaths) {
+    try {
+      await new Promise<void>((resolve, reject) => {
+        cp.exec(`git reset HEAD "${filePath}"`, (error) => {
+          if (error) {
+            reject(error);
+          } else {
+            resolve();
+          }
+        });
+      });
+    } catch {
+      // Ignorer les erreurs d'unstage
+    }
+  }
 }
 
 type ExtensionTagsMap = Record<string, string[]>;
@@ -1761,6 +1908,76 @@ export function activate(context: vscode.ExtensionContext) {
     () => secretScanner.fullScan()
   );
 
+  // Commande de commit avec vérification des secrets
+  const commitWithSecretCheckCmd = vscode.commands.registerCommand(
+    "pkvsconf.commitWithSecretCheck",
+    async () => {
+      const result = await scanStagedFilesForSecrets();
+
+      if (!result.workspaceRoot) {
+        vscode.window.showWarningMessage("Aucun repository Git trouvé.");
+        return;
+      }
+
+      if (result.files.length === 0) {
+        // Pas de secrets, on peut commit normalement
+        await vscode.commands.executeCommand("git.commit");
+        return;
+      }
+
+      // Secrets détectés - afficher le warning modal
+      const totalSecrets = result.files.reduce(
+        (sum, file) => sum + file.secrets.length,
+        0
+      );
+
+      const fileList = result.files
+        .map((f) => {
+          const secretTypes = [...new Set(f.secrets.map((s) => s.patternName))].join(", ");
+          return `• ${f.relativePath} (${secretTypes})`;
+        })
+        .join("\n");
+
+      const message = `⚠️ ${totalSecrets} secret(s) détecté(s) dans ${result.files.length} fichier(s) staged !\n\n${fileList}`;
+
+      const choice = await vscode.window.showWarningMessage(
+        message,
+        { modal: true },
+        "Voir les secrets",
+        "Ajouter au .gitignore",
+        "Commit quand même"
+      );
+
+      if (choice === "Voir les secrets") {
+        // Ouvrir le premier fichier avec des secrets
+        const firstFile = result.files[0];
+        const document = await vscode.workspace.openTextDocument(firstFile.filePath);
+        const editor = await vscode.window.showTextDocument(document);
+        const firstSecret = firstFile.secrets[0];
+        const position = new vscode.Position(firstSecret.line - 1, firstSecret.column - 1);
+        editor.selection = new vscode.Selection(position, position);
+        editor.revealRange(
+          new vscode.Range(position, position),
+          vscode.TextEditorRevealType.InCenter
+        );
+      } else if (choice === "Ajouter au .gitignore") {
+        const filePaths = result.files.map((f) => f.filePath);
+        await addFilesToGitignore(result.workspaceRoot, filePaths);
+        await unstageFiles(filePaths);
+
+        // Rescanner les secrets après modification du gitignore
+        await secretScanner.fullScan();
+
+        vscode.window.showInformationMessage(
+          `${result.files.length} fichier(s) ajouté(s) au .gitignore et retiré(s) du staging.`
+        );
+      } else if (choice === "Commit quand même") {
+        await vscode.commands.executeCommand("git.commit");
+      }
+      // Si annulé (undefined), on ne fait rien
+    }
+  );
+
   const previewActivePageCmd = vscode.commands.registerCommand(
     "pkvsconf.previewActivePage",
     async () => {
@@ -1963,7 +2180,8 @@ export function activate(context: vscode.ExtensionContext) {
     regenerateTitlebarColorCmd,
     previewActivePageCmd,
     showSecretsCmd,
-    rescanSecretsCmd
+    rescanSecretsCmd,
+    commitWithSecretCheckCmd
   );
 
   void refreshRootSize();

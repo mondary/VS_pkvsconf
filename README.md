@@ -37,6 +37,14 @@ Extension VS Code qui ajoute plusieurs fonctionnalités utiles : bouton pour rev
 
   Une couleur est assignee automatiquement a chaque workspace pour distinguer les fenetres. La couleur est persistante et regenerable via le bouton "Title Bar" dans la status bar ou la commande palette "Regenerer la couleur de la title bar". Chaque clic génère une nouvelle couleur aléatoire.
 
+- 🔐 Detection des secrets exposes
+
+  Scan automatique du workspace pour detecter les secrets (cles API, tokens, mots de passe, etc.). Un indicateur dans la status bar affiche le nombre de secrets detectes. Cliquez dessus pour voir la liste et naviguer vers les fichiers concernes.
+
+- 🛡️ Blocage de commit avec secrets
+
+  Commande "Commit (verification secrets)" qui scanne les fichiers staged avant le commit. Si des secrets sont detectes, un popup modal bloque le commit et propose : voir les secrets, les ajouter au .gitignore, ou forcer le commit. Raccourci : `Cmd+Shift+Enter` (Mac) / `Ctrl+Shift+Enter` (Windows/Linux).
+
 ## 📁 Arborescence
 
 - `extension/` : code de l'extension, build, scripts
@@ -79,6 +87,11 @@ vsce publish
 - Créer une release GitHub ou utiliser "Run workflow"
 
 ## 🧾 Release Notes
+
+### 0.3.34
+
+- 🛡️ Nouvelle fonctionnalite : Blocage de commit avec secrets. Scanne les fichiers staged avant commit et bloque si des secrets sont detectes. Options : voir les secrets, ajouter au .gitignore, ou forcer le commit.
+- 🔐 Ajout de la detection des secrets exposes dans le workspace avec indicateur dans la status bar.
 
 ### 0.3.30
 

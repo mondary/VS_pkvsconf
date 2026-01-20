@@ -2,7 +2,7 @@
   "name": "vs-pkvsconf",
   "displayName": "VS_pkvsconf",
   "description": "Adds a toolbar button in Explorer to reveal the active file in Finder.",
-  "version": "0.3.33",
+  "version": "0.3.34",
   "publisher": "Cmondary",
   "icon": "icon.png",
   "license": "UNLICENSED",
@@ -27,6 +27,7 @@
     "onCommand:pkvsconf.previewActivePage",
     "onCommand:pkvsconf.showExposedSecrets",
     "onCommand:pkvsconf.rescanSecrets",
+    "onCommand:pkvsconf.commitWithSecretCheck",
     "onView:projectIconView",
     "onView:extensionTagsView",
     "onStartupFinished"
@@ -87,6 +88,11 @@
         "command": "pkvsconf.rescanSecrets",
         "title": "Rescanner les secrets",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "pkvsconf.commitWithSecretCheck",
+        "title": "Commit (vérification secrets)",
+        "icon": "$(git-commit)"
       }
     ],
     "colors": [
@@ -149,6 +155,11 @@
         {
           "command": "revealInFinderButton.openGitHubRepo",
           "group": "navigation"
+        },
+        {
+          "command": "pkvsconf.commitWithSecretCheck",
+          "group": "navigation",
+          "when": "scmProvider == git"
         }
       ],
       "view/title": [
@@ -175,7 +186,15 @@
           "group": "inline"
         }
       ]
-    }
+    },
+    "keybindings": [
+      {
+        "command": "pkvsconf.commitWithSecretCheck",
+        "key": "ctrl+shift+enter",
+        "mac": "cmd+shift+enter",
+        "when": "scmRepository"
+      }
+    ]
   },
   "scripts": {
     "build": "tsc -p .",
