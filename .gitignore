@@ -3,3 +3,9 @@ extension/node_modules/
 .DS_Store
 openspec/
 Icon
+.claude/
+.vscode/
+AGENTS.md
+skill_*.md
+release/
+releases/
