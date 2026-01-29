@@ -2,7 +2,7 @@
   "name": "vs-pkvsconf",
   "displayName": "VS_pkvsconf",
   "description": "Adds a toolbar button in Explorer to reveal the active file in Finder.",
-  "version": "0.3.36",
+  "version": "0.3.37",
   "publisher": "Cmondary",
   "icon": "icon.png",
   "license": "MIT",
@@ -28,6 +28,7 @@
     "onCommand:pkvsconf.showExposedSecrets",
     "onCommand:pkvsconf.rescanSecrets",
     "onCommand:pkvsconf.commitWithSecretCheck",
+    "onCommand:pkvsconf.createSkillsSymlink",
     "onView:projectIconView",
     "onView:extensionTagsView",
     "onStartupFinished"
@@ -93,6 +94,11 @@
         "command": "pkvsconf.commitWithSecretCheck",
         "title": "Commit (vérification secrets)",
         "icon": "$(git-commit)"
+      },
+      {
+        "command": "pkvsconf.createSkillsSymlink",
+        "title": "Create Skills Symlink",
+        "icon": "$(link-external)"
       }
     ],
     "colors": [
@@ -142,6 +148,9 @@
         },
         {
           "command": "pkvsconf.regenerateWorkspaceTitlebarColor"
+        },
+        {
+          "command": "pkvsconf.createSkillsSymlink"
         }
       ],
       "extension/context": [
@@ -166,6 +175,11 @@
         {
           "command": "revealInFinderButton.revealActive",
           "when": "view == workbench.explorer.fileView && isMac",
+          "group": "navigation"
+        },
+        {
+          "command": "pkvsconf.createSkillsSymlink",
+          "when": "view == workbench.explorer.fileView",
           "group": "navigation"
         },
         {

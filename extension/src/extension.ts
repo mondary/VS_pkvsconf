@@ -1687,6 +1687,16 @@ export function activate(context: vscode.ExtensionContext) {
   secretsItem.command = "pkvsconf.showExposedSecrets";
   secretsItem.show();
 
+  // Skills Symlink Status Bar Item
+  const skillsSymlinkItem = vscode.window.createStatusBarItem(
+    vscode.StatusBarAlignment.Left,
+    96
+  );
+  skillsSymlinkItem.text = "$(link) Skills";
+  skillsSymlinkItem.tooltip = "Créer un lien symbolique vers le dossier de skills";
+  skillsSymlinkItem.command = "pkvsconf.createSkillsSymlink";
+  skillsSymlinkItem.show();
+
   const secretScanner = new SecretScanner(secretsItem);
   let secretsWatcher: vscode.FileSystemWatcher | undefined;
 
@@ -2267,6 +2277,52 @@ export function activate(context: vscode.ExtensionContext) {
 </html>`;
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════════
+  // SKILLS SYMLINK - Create symlink to central skills folder
+  // ═══════════════════════════════════════════════════════════════════════════════
+
+  const createSkillsSymlinkCmd = vscode.commands.registerCommand(
+    "pkvsconf.createSkillsSymlink",
+    async () => {
+      const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+
+      if (!workspaceFolder) {
+        vscode.window.showErrorMessage("Aucun workspace ouvert.");
+        return;
+      }
+
+      const workspaceRoot = workspaceFolder.uri.fsPath;
+      const username = process.env.USER || process.env.USERNAME || "clm";
+      const sourcePath = `/Users/${username}/Documents/GitHub/-skills`;
+      const targetPath = path.join(workspaceRoot, ".skills");
+
+      // Vérifier si le symlink existe déjà
+      try {
+        const targetStats = await fs.stat(targetPath);
+        if (targetStats.isSymbolicLink() || targetStats.isDirectory()) {
+          vscode.window.showInformationMessage(
+            "Le lien symbolique '.skills' existe déjà dans ce workspace."
+          );
+          return;
+        }
+      } catch (error) {
+        // Le fichier n'existe pas, c'est normal
+      }
+
+      // Créer le symlink
+      try {
+        await fs.symlink(sourcePath, targetPath, "dir");
+        vscode.window.showInformationMessage(
+          "Lien symbolique '.skills' créé avec succès !"
+        );
+      } catch (error) {
+        vscode.window.showErrorMessage(
+          `Erreur lors de la création du lien symbolique: ${error}`
+        );
+      }
+    }
+  );
+
   context.subscriptions.push(cmd, refreshCmd, openRepoCmd, rootSizeItem, previewItem, titlebarColorItem, secretsItem);
   context.subscriptions.push(
     manageCategoryCmd,
@@ -2275,7 +2331,9 @@ export function activate(context: vscode.ExtensionContext) {
     previewActivePageCmd,
     showSecretsCmd,
     rescanSecretsCmd,
-    commitWithSecretCheckCmd
+    commitWithSecretCheckCmd,
+    createSkillsSymlinkCmd,
+    skillsSymlinkItem
   );
 
   void refreshRootSize();
