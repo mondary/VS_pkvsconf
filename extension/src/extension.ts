@@ -2296,30 +2296,74 @@ export function activate(context: vscode.ExtensionContext) {
       const sourcePath = `/Users/${username}/Documents/GitHub/-skills`;
       const targetPath = path.join(workspaceRoot, ".skills");
 
+      const gitignorePath = path.join(workspaceRoot, ".gitignore");
+      const gitignoreEntry = ".skills";
+
+      const ensureGitignoreHasSkills = async () => {
+        try {
+          const existing = await fs.readFile(gitignorePath, "utf8");
+          const hasEntry = existing
+            .split(/\r?\n/)
+            .some((line) => line.trim() === gitignoreEntry || line.trim() === `${gitignoreEntry}/`);
+
+          if (!hasEntry) {
+            const needsNewline = existing.length > 0 && !existing.endsWith("\n");
+            const updated = `${existing}${needsNewline ? "\n" : ""}${gitignoreEntry}\n`;
+            await fs.writeFile(gitignorePath, updated, "utf8");
+          }
+        } catch (error: any) {
+          if (error.code === "ENOENT") {
+            await fs.writeFile(gitignorePath, `${gitignoreEntry}\n`, "utf8");
+          } else {
+            throw error;
+          }
+        }
+      };
+
+      let symlinkCreated = false;
+
       // Vérifier si le symlink existe déjà
       try {
-        const targetStats = await fs.stat(targetPath);
-        if (targetStats.isSymbolicLink() || targetStats.isDirectory()) {
-          vscode.window.showInformationMessage(
-            "Le lien symbolique '.skills' existe déjà dans ce workspace."
+        const targetStats = await fs.lstat(targetPath);
+        if (!targetStats.isSymbolicLink()) {
+          vscode.window.showErrorMessage(
+            "Un fichier ou dossier '.skills' existe déjà et n'est pas un lien symbolique."
           );
           return;
         }
-      } catch (error) {
-        // Le fichier n'existe pas, c'est normal
+      } catch (error: any) {
+        if (error.code !== "ENOENT") {
+          vscode.window.showErrorMessage(
+            `Erreur lors de la vérification du lien symbolique: ${error}`
+          );
+          return;
+        }
+        // Créer le symlink
+        try {
+          await fs.symlink(sourcePath, targetPath, "dir");
+          symlinkCreated = true;
+        } catch (symlinkError) {
+          vscode.window.showErrorMessage(
+            `Erreur lors de la création du lien symbolique: ${symlinkError}`
+          );
+          return;
+        }
       }
 
-      // Créer le symlink
       try {
-        await fs.symlink(sourcePath, targetPath, "dir");
-        vscode.window.showInformationMessage(
-          "Lien symbolique '.skills' créé avec succès !"
-        );
+        await ensureGitignoreHasSkills();
       } catch (error) {
         vscode.window.showErrorMessage(
-          `Erreur lors de la création du lien symbolique: ${error}`
+          `Erreur lors de la mise à jour du .gitignore: ${error}`
         );
+        return;
       }
+
+      vscode.window.showInformationMessage(
+        symlinkCreated
+          ? "Lien symbolique '.skills' créé et .gitignore mis à jour."
+          : "Lien symbolique '.skills' déjà présent. .gitignore mis à jour."
+      );
     }
   );
 

@@ -4,6 +4,7 @@ extension/node_modules/
 openspec/
 Icon
 .claude/
+.skills/
 .vscode/
 AGENTS.md
 skill_*.md
