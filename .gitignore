@@ -11,3 +11,4 @@ release/
 releases/
 .github/workflows/
 fake-secrets.env
+PUBLISH.md
