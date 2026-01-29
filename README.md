@@ -88,6 +88,10 @@ vsce publish
 
 ## 🧾 Release Notes
 
+### 0.3.35
+
+- 🚨 Warning automatique des qu'un fichier avec secret est stage. Plus besoin d'utiliser une commande speciale, le warning s'affiche automatiquement.
+
 ### 0.3.34
 
 - 🛡️ Nouvelle fonctionnalite : Blocage de commit avec secrets. Scanne les fichiers staged avant commit et bloque si des secrets sont detectes. Options : voir les secrets, ajouter au .gitignore, ou forcer le commit.

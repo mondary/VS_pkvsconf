@@ -2,7 +2,7 @@
   "name": "vs-pkvsconf",
   "displayName": "VS_pkvsconf",
   "description": "Adds a toolbar button in Explorer to reveal the active file in Finder.",
-  "version": "0.3.34",
+  "version": "0.3.35",
   "publisher": "Cmondary",
   "icon": "icon.png",
   "license": "UNLICENSED",

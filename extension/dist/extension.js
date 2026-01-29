@@ -1356,6 +1356,74 @@ function activate(context) {
             await secretScanner.fullScan();
         }
     }));
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // SURVEILLANCE AUTOMATIQUE DES FICHIERS STAGED
+    // ═══════════════════════════════════════════════════════════════════════════════
+    let lastStagedSecretsWarning = 0;
+    const STAGED_WARNING_COOLDOWN = 5000; // 5 secondes entre les warnings
+    const checkStagedFilesForSecretsAutomatically = async () => {
+        const now = Date.now();
+        if (now - lastStagedSecretsWarning < STAGED_WARNING_COOLDOWN) {
+            return; // Éviter le spam de warnings
+        }
+        const result = await scanStagedFilesForSecrets();
+        if (result.hasSecrets && result.files.length > 0) {
+            lastStagedSecretsWarning = now;
+            const totalSecrets = result.files.reduce((sum, file) => sum + file.secrets.length, 0);
+            const fileList = result.files
+                .map((f) => f.relativePath)
+                .slice(0, 3)
+                .join(", ");
+            const moreFiles = result.files.length > 3 ? ` (+${result.files.length - 3} autres)` : "";
+            const choice = await vscode.window.showWarningMessage(`🔐 ${totalSecrets} secret(s) détecté(s) dans les fichiers staged : ${fileList}${moreFiles}`, "Voir les secrets", "Ajouter au .gitignore", "Ignorer");
+            if (choice === "Voir les secrets") {
+                const firstFile = result.files[0];
+                const document = await vscode.workspace.openTextDocument(firstFile.filePath);
+                const editor = await vscode.window.showTextDocument(document);
+                const firstSecret = firstFile.secrets[0];
+                const position = new vscode.Position(firstSecret.line - 1, firstSecret.column - 1);
+                editor.selection = new vscode.Selection(position, position);
+                editor.revealRange(new vscode.Range(position, position), vscode.TextEditorRevealType.InCenter);
+            }
+            else if (choice === "Ajouter au .gitignore" && result.workspaceRoot) {
+                const filePaths = result.files.map((f) => f.filePath);
+                await addFilesToGitignore(result.workspaceRoot, filePaths);
+                await unstageFiles(filePaths);
+                await secretScanner.fullScan();
+                vscode.window.showInformationMessage(`${result.files.length} fichier(s) ajouté(s) au .gitignore et retiré(s) du staging.`);
+            }
+        }
+    };
+    // Surveiller les changements du repository Git
+    const setupGitStagingWatcher = async () => {
+        const gitApi = await getGitApi();
+        if (!gitApi) {
+            return;
+        }
+        // Surveiller chaque repository
+        for (const repo of gitApi.repositories) {
+            // L'API Git expose onDidChange sur le state
+            if (repo.state && typeof repo.state.onDidChange === "function") {
+                const disposable = repo.state.onDidChange(() => {
+                    void checkStagedFilesForSecretsAutomatically();
+                });
+                context.subscriptions.push(disposable);
+            }
+        }
+        // Surveiller les nouveaux repositories
+        gitApi.onDidOpenRepository((repo) => {
+            if (repo.state && typeof repo.state.onDidChange === "function") {
+                const disposable = repo.state.onDidChange(() => {
+                    void checkStagedFilesForSecretsAutomatically();
+                });
+                context.subscriptions.push(disposable);
+            }
+        });
+    };
+    // Initialiser la surveillance Git après un délai (laisser le temps à l'API Git de se charger)
+    setTimeout(() => {
+        void setupGitStagingWatcher();
+    }, 2000);
     let rootSizeInProgress = false;
     const refreshRootSize = async () => {
         if (rootSizeInProgress) {
