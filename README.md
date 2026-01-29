@@ -1,6 +1,5 @@
 # VS_pkvsconf
 
-![Extension icon](extension/icon.png)
 ![Project icon](icon.png)
 
 ✨ Extension VS Code simple, claire et sympa pour booster ton Explorer.

@@ -9,3 +9,5 @@ AGENTS.md
 skill_*.md
 release/
 releases/
+.github/workflows/
+fake-secrets.env
