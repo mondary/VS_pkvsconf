@@ -49,15 +49,20 @@
         }
       }
     },
-    "viewsContainers": {
-      "activitybar": [
-        {
-          "id": "extensionTagsContainer",
-          "title": "PK Extensions",
-          "icon": "$(tag)"
-        }
-      ]
-    },
+  "viewsContainers": {
+    "activitybar": [
+      {
+        "id": "extensionTagsContainer",
+        "title": "PK Extensions",
+        "icon": "$(tag)"
+      },
+      {
+        "id": "launchpadContainer",
+        "title": "Launchpad",
+        "icon": "$(rocket)"
+      }
+    ]
+  },
     "commands": [
       {
         "command": "revealInFinderButton.revealActive",
@@ -150,29 +155,30 @@
         }
       }
     ],
-    "views": {
-      "explorer": [
-        {
-          "id": "projectIconView",
-          "name": "Project Icon",
-          "type": "webview",
-          "collapsed": false
-        },
-        {
-          "id": "launchpadView",
-      "name": "Launchpad Projets",
-      "type": "webview"
-    }
-  ],
-      "extensionTagsContainer": [
-        {
-          "id": "extensionTagsView",
-          "name": "PK Extensions",
-          "type": "webview"
-        }
-      ],
-      "launchpadContainer": []
-    },
+  "views": {
+    "explorer": [
+      {
+        "id": "projectIconView",
+        "name": "Project Icon",
+        "type": "webview",
+        "collapsed": false
+      }
+    ],
+    "extensionTagsContainer": [
+      {
+        "id": "extensionTagsView",
+        "name": "PK Extensions",
+        "type": "webview"
+      }
+    ],
+    "launchpadContainer": [
+      {
+        "id": "launchpadView",
+        "name": "Launchpad Projets",
+        "type": "webview"
+      }
+    ]
+  },
     "menus": {
       "commandPalette": [
         {
