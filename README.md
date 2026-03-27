@@ -63,10 +63,14 @@ npm run release
 ## 🧪 Installation (Antigravity)
 
 - Palette de commandes : "Extensions: Install from VSIX..."
-- Selectionner `release/vs-pkvsconf-2.0.0.vsix`
+- Selectionner `release/vs-pkvsconf-2.0.1.vsix`
 - Recharger la fenetre
 
 ## 🧾 Release Notes
+
+### 2.0.1
+
+- 🛠️ Correctif : le paramètre `pkvsconf.launchpad.projects` est enregistré et utilisable.
 
 ### 2.0.0
 
