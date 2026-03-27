@@ -18,73 +18,6 @@ type LaunchpadProject = {
   path: string;
 };
 
-type LaunchpadGroup = "current" | "all";
-
-class LaunchpadTreeItem extends vscode.TreeItem {
-  constructor(
-    label: string,
-    collapsibleState: vscode.TreeItemCollapsibleState,
-    public readonly group: LaunchpadGroup | undefined,
-    public readonly project: LaunchpadProject | undefined
-  ) {
-    super(label, collapsibleState);
-    if (project) {
-      this.iconPath = new vscode.ThemeIcon("folder");
-      this.contextValue = "launchpadProject";
-      this.tooltip = project.path;
-      this.command = {
-        command: "pkvsconf.launchpadOpen",
-        title: "Ouvrir le projet",
-        arguments: [project]
-      };
-    }
-  }
-}
-
-class LaunchpadTreeProvider implements vscode.TreeDataProvider<LaunchpadTreeItem> {
-  private _onDidChangeTreeData = new vscode.EventEmitter<LaunchpadTreeItem | void>();
-  readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
-
-  refresh(): void {
-    this._onDidChangeTreeData.fire();
-  }
-
-  getTreeItem(element: LaunchpadTreeItem): vscode.TreeItem {
-    return element;
-  }
-
-  getChildren(element?: LaunchpadTreeItem): vscode.ProviderResult<LaunchpadTreeItem[]> {
-    const configProjects = getLaunchpadProjects();
-    if (!element) {
-      return [
-        new LaunchpadTreeItem("En cours", vscode.TreeItemCollapsibleState.Expanded, "current", undefined),
-        new LaunchpadTreeItem("Launchpad", vscode.TreeItemCollapsibleState.Expanded, "all", undefined)
-      ];
-    }
-
-    if (element.group === "current") {
-      const workspaces = vscode.workspace.workspaceFolders ?? [];
-      return workspaces.map(
-        (ws) =>
-          new LaunchpadTreeItem(
-            path.basename(ws.uri.fsPath),
-            vscode.TreeItemCollapsibleState.None,
-            undefined,
-            { name: path.basename(ws.uri.fsPath), path: ws.uri.fsPath }
-          )
-      );
-    }
-
-    if (element.group === "all") {
-      return configProjects.map(
-        (p) => new LaunchpadTreeItem(p.name || path.basename(p.path), vscode.TreeItemCollapsibleState.None, undefined, p)
-      );
-    }
-
-    return [];
-  }
-}
-
 function getLaunchpadProjects(): LaunchpadProject[] {
   const cfg = vscode.workspace.getConfiguration("pkvsconf").get<LaunchpadProject[]>("launchpad.projects");
   if (!cfg || !Array.isArray(cfg)) {
@@ -146,6 +79,135 @@ async function pickProjectForAction(placeHolder: string): Promise<LaunchpadProje
     { placeHolder }
   );
   return pick?.project;
+}
+
+function toDataUriFromSvg(title: string, bg: string): string {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="180" height="110"><rect width="100%" height="100%" rx="12" ry="12" fill="${bg}"/><text x="50%" y="55%" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="36" fill="white">${title}</text></svg>`;
+  const encoded = Buffer.from(svg).toString("base64");
+  return `data:image/svg+xml;base64,${encoded}`;
+}
+
+async function getProjectIcon(project: LaunchpadProject): Promise<string> {
+  const candidate = path.join(project.path, "icon.png");
+  try {
+    const content = await fs.readFile(candidate);
+    return `data:image/png;base64,${content.toString("base64")}`;
+  } catch {
+    const initials = (project.name || path.basename(project.path)).trim().slice(0, 2).toUpperCase();
+    const palette = ["#2A9D8F", "#E76F51", "#264653", "#8AB17D", "#F4A261", "#6D597A", "#1D3557"];
+    const color = palette[(project.name || project.path).length % palette.length];
+    return toDataUriFromSvg(initials, color);
+  }
+}
+
+async function buildLaunchpadHtml(projects: LaunchpadProject[]): Promise<string> {
+  const cards = await Promise.all(
+    projects.map(async (p) => ({
+      name: p.name || path.basename(p.path),
+      path: p.path,
+      icon: await getProjectIcon(p)
+    }))
+  );
+
+  const cardsHtml = cards
+    .map(
+      (c) => `
+        <button class="card" data-path="${c.path}">
+          <img src="${c.icon}" alt="${c.name}" />
+          <div class="name">${c.name}</div>
+        </button>`
+    )
+    .join("");
+
+  return `<!DOCTYPE html>
+  <html>
+    <head>
+      <meta charset="UTF-8" />
+      <style>
+        :root {
+          color-scheme: ${vscode.window.activeColorTheme.kind === vscode.ColorThemeKind.Dark ? "dark" : "light"};
+        }
+        body {
+          margin: 0;
+          padding: 12px;
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        }
+        .grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+          gap: 12px;
+        }
+        .card {
+          border: 1px solid var(--vscode-editorWidget-border, #4444);
+          background: var(--vscode-editor-background);
+          border-radius: 12px;
+          padding: 12px;
+          text-align: center;
+          cursor: pointer;
+          transition: transform 0.08s ease, box-shadow 0.08s ease;
+        }
+        .card:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 8px 18px rgba(0,0,0,0.18);
+        }
+        .card img {
+          width: 96px;
+          height: 96px;
+          object-fit: contain;
+          border-radius: 10px;
+          background: #1112;
+          margin-bottom: 8px;
+        }
+        .name {
+          font-size: 13px;
+          color: var(--vscode-foreground);
+          word-break: break-word;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="grid">
+        ${cardsHtml}
+      </div>
+      <script>
+        const vscode = acquireVsCodeApi();
+        document.querySelectorAll('.card').forEach(card => {
+          card.addEventListener('click', () => {
+            vscode.postMessage({ command: 'open', path: card.dataset.path });
+          });
+          card.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            vscode.postMessage({ command: 'reveal', path: card.dataset.path });
+          });
+        });
+      </script>
+    </body>
+  </html>`;
+}
+
+class LaunchpadWebviewProvider implements vscode.WebviewViewProvider {
+  constructor(private readonly context: vscode.ExtensionContext) {}
+
+  async resolveWebviewView(webviewView: vscode.WebviewView): Promise<void> {
+    webviewView.webview.options = {
+      enableScripts: true
+    };
+
+    webviewView.webview.onDidReceiveMessage(async (message) => {
+      if (message.command === "open" && message.path) {
+        await openProjectInNewWindow(message.path);
+      } else if (message.command === "reveal" && message.path) {
+        await revealProjectInFinder({ name: path.basename(message.path), path: message.path });
+      }
+    });
+
+    await this.render(webviewView);
+  }
+
+  async render(view: vscode.WebviewView): Promise<void> {
+    const projects = getLaunchpadProjects();
+    view.webview.html = await buildLaunchpadHtml(projects);
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1738,7 +1800,7 @@ export function activate(context: vscode.ExtensionContext) {
     tagsStore,
     context.extensionUri
   );
-  const launchpadProvider = new LaunchpadTreeProvider();
+  const launchpadProvider = new LaunchpadWebviewProvider(context);
 
   const updateWorkspace = async () => {
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
@@ -1776,14 +1838,7 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.window.registerWebviewViewProvider(EXTENSION_TAGS_VIEW_ID, categoriesProvider)
   );
   context.subscriptions.push(
-    vscode.window.registerTreeDataProvider(LAUNCHPAD_VIEW_ID, launchpadProvider)
-  );
-  context.subscriptions.push(
-    vscode.workspace.onDidChangeConfiguration((event) => {
-      if (event.affectsConfiguration("pkvsconf.launchpad.projects")) {
-        launchpadProvider.refresh();
-      }
-    })
+    vscode.window.registerWebviewViewProvider(LAUNCHPAD_VIEW_ID, launchpadProvider)
   );
 
   void updateWorkspace();
@@ -2081,7 +2136,13 @@ export function activate(context: vscode.ExtensionContext) {
     "pkvsconf.launchpadAddCurrent",
     async () => {
       await addCurrentWorkspaceToLaunchpad();
-      launchpadProvider.refresh();
+      const view = await vscode.commands.executeCommand<vscode.WebviewView>(
+        "workbench.views.getView",
+        LAUNCHPAD_VIEW_ID
+      );
+      if (view) {
+        await launchpadProvider.render(view);
+      }
     }
   );
 

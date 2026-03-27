@@ -160,10 +160,10 @@
         },
         {
           "id": "launchpadView",
-          "name": "Launchpad Projets",
-          "type": "tree"
-        }
-      ],
+      "name": "Launchpad Projets",
+      "type": "webview"
+    }
+  ],
       "extensionTagsContainer": [
         {
           "id": "extensionTagsView",
@@ -171,13 +171,7 @@
           "type": "webview"
         }
       ],
-      "launchpadContainer": [
-        {
-          "id": "launchpadView",
-          "name": "Launchpad Projets",
-          "type": "tree"
-        }
-      ]
+      "launchpadContainer": []
     },
     "menus": {
       "commandPalette": [
