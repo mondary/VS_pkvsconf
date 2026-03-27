@@ -63,13 +63,16 @@ npm run release
 ## 🧪 Installation (Antigravity)
 
 - Palette de commandes : "Extensions: Install from VSIX..."
-- Selectionner `release/vs-pkvsconf-2.0.1.vsix`
+- Selectionner `release/vs-pkvsconf-2.1.0.vsix`
 - Recharger la fenetre
 
 ## 🧾 Release Notes
 
-### 2.0.1
+### 2.1.0
 
+- 🚀 Launchpad projets : vue explorateur + statut bar + raccourci pour ouvrir/basculer entre projets.
+- 🗂️ Deux sections : projets en cours et projets du launchpad (config `pkvsconf.launchpad.projects`).
+- 🔍 Commande pour ajouter le workspace courant au launchpad.
 - 🛠️ Correctif : enregistrement du paramètre `pkvsconf.launchpad.projects`.
 
 ### 2.0.0

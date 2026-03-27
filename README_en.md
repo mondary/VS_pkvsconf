@@ -64,14 +64,17 @@ npm run release
 ## 🧪 Install (Antigravity)
 
 - Command Palette: "Extensions: Install from VSIX..."
-- Select `release/vs-pkvsconf-2.0.1.vsix`
+- Select `release/vs-pkvsconf-2.1.0.vsix`
 - Reload window
 
 ## 🧾 Changelog
 
-### 2.0.1
+### 2.1.0
 
-- 🛠️ Fix: `pkvsconf.launchpad.projects` configuration is now registered and usable.
+- 🚀 Projects Launchpad: explorer view, status bar button, and keyboard shortcut to open/switch projects.
+- 🗂️ Two sections: “In Progress” and Launchpad projects (config `pkvsconf.launchpad.projects`).
+- 🔍 Command to add the current workspace to the Launchpad.
+- 🛠️ Fix: `pkvsconf.launchpad.projects` configuration registered and usable.
 
 ### 2.0.0
 
