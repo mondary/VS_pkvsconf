@@ -62,10 +62,14 @@ npm run release
 ## 🧪 Install (Antigravity)
 
 - Command Palette: "Extensions: Install from VSIX..."
-- Select `release/vs-pkvsconf-1.38.0.vsix`
+- Select `release/vs-pkvsconf-1.39.0.vsix`
 - Reload window
 
 ## 🧾 Changelog
+
+### 1.39
+
+- 📝 Aligned `extension/README.md` with the same content as the GitHub README.
 
 ### 1.38
 
