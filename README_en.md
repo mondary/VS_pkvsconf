@@ -62,12 +62,12 @@ npm run release
 ## 🧪 Install (Antigravity)
 
 - Command Palette: "Extensions: Install from VSIX..."
-- Select `release/vs-pkvsconf-1.39.1.vsix`
+- Select `release/vs-pkvsconf-1.40.0.vsix`
 - Reload window
 
 ## 🧾 Changelog
 
-### 1.39.1
+### 1.40.0
 
 - 🔗 The `Agent Skills` button now creates a `.agent` symlink to `-agent`.
 - 🔁 If `.agent` already exists but points elsewhere, the symlink is replaced automatically.
