@@ -64,10 +64,14 @@ npm run release
 ## 🧪 Install (Antigravity)
 
 - Command Palette: "Extensions: Install from VSIX..."
-- Select `release/vs-pkvsconf-2.1.0.vsix`
+- Select `release/vs-pkvsconf-2.2.0.vsix`
 - Reload window
 
 ## 🧾 Changelog
+
+### 2.2.0
+
+- 🎛️ Launchpad grid limited to ~4 apps per row (responsive).
 
 ### 2.1.0
 

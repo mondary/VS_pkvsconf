@@ -108,11 +108,15 @@ async function buildLaunchpadHtml(projects) {
           margin: 0;
           padding: 12px;
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+          display: flex;
+          justify-content: center;
         }
         .grid {
           display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+          grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
           gap: 12px;
+          width: 100%;
+          max-width: 820px; /* ~4 cartes par ligne avec gap */
         }
         .card {
           border: 1px solid var(--vscode-editorWidget-border, #4444);

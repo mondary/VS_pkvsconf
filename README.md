@@ -63,10 +63,14 @@ npm run release
 ## 🧪 Installation (Antigravity)
 
 - Palette de commandes : "Extensions: Install from VSIX..."
-- Selectionner `release/vs-pkvsconf-2.1.0.vsix`
+- Selectionner `release/vs-pkvsconf-2.2.0.vsix`
 - Recharger la fenetre
 
 ## 🧾 Release Notes
+
+### 2.2.0
+
+- 🎛️ Launchpad grille capée à ~4 apps par ligne (responsive).
 
 ### 2.1.0
 
