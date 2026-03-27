@@ -39,6 +39,16 @@
   ],
   "main": "./dist/extension.js",
   "contributes": {
+    "configuration": {
+      "title": "PK VS Conf",
+      "properties": {
+        "pkvsconf.launchpad.projects": {
+          "type": "array",
+          "default": [],
+          "description": "Liste des projets du launchpad. Chaque entrée : { \"name\": \"MonProjet\", \"path\": \"/Users/xxx/Projet\" }"
+        }
+      }
+    },
     "viewsContainers": {
       "activitybar": [
         {
@@ -265,16 +275,6 @@
         "mac": "cmd+alt+l"
       }
     ]
-  },
-  "configuration": {
-    "title": "PK VS Conf",
-    "properties": {
-      "pkvsconf.launchpad.projects": {
-        "type": "array",
-        "default": [],
-        "description": "Liste des projets du launchpad. Chaque entrée : { \"name\": \"MonProjet\", \"path\": \"/Users/xxx/Projet\" }"
-      }
-    }
   },
   "scripts": {
     "build": "tsc -p .",
