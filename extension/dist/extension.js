@@ -1314,10 +1314,10 @@ function activate(context) {
     secretsItem.tooltip = "Détection des secrets exposés";
     secretsItem.command = "pkvsconf.showExposedSecrets";
     secretsItem.show();
-    // Skills Symlink Status Bar Item
+    // Agent Skills Status Bar Item
     const skillsSymlinkItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 96);
-    skillsSymlinkItem.text = "$(link) Skills";
-    skillsSymlinkItem.tooltip = "Créer un lien symbolique vers le dossier de skills";
+    skillsSymlinkItem.text = "$(link) Agent Skills";
+    skillsSymlinkItem.tooltip = "Créer un lien symbolique .skills vers le dossier -agent";
     skillsSymlinkItem.command = "pkvsconf.createSkillsSymlink";
     skillsSymlinkItem.show();
     const secretScanner = new SecretScanner(secretsItem);
@@ -1730,7 +1730,7 @@ function activate(context) {
 </html>`;
     }
     // ═══════════════════════════════════════════════════════════════════════════════
-    // SKILLS SYMLINK - Create symlink to central skills folder
+    // AGENT SKILLS SYMLINK - Create symlink to central agent folder
     // ═══════════════════════════════════════════════════════════════════════════════
     const createSkillsSymlinkCmd = vscode.commands.registerCommand("pkvsconf.createSkillsSymlink", async () => {
         const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
@@ -1740,7 +1740,7 @@ function activate(context) {
         }
         const workspaceRoot = workspaceFolder.uri.fsPath;
         const username = process.env.USER || process.env.USERNAME || "clm";
-        const sourcePath = `/Users/${username}/Documents/GitHub/-skills`;
+        const sourcePath = `/Users/${username}/Documents/GitHub/-agent`;
         const targetPath = path.join(workspaceRoot, ".skills");
         const gitignorePath = path.join(workspaceRoot, ".gitignore");
         const gitignoreEntry = ".skills";

@@ -17,7 +17,7 @@
 - 🎨 Couleur de title bar par workspace
 - 🔐 Detection des secrets exposes
 - 🛡️ Blocage de commit avec secrets
-- 🔗 Symlink .skills vers un dossier central
+- 🔗 Agent Skills : symlink `.skills` vers le dossier central `-agent`
 ## 🧠 Utilisation
 
 - Reveal in Finder : bouton en haut du panneau Explorer (macOS).
@@ -28,7 +28,7 @@
 - Preview page : bouton en status bar, support PHP avec serveur auto.
 - Title bar : couleur auto par workspace, bouton pour regenerer.
 - Secrets : scan workspace + blocage de commit si secrets staged.
-- Skills : cree un lien symbolique `.skills` vers un dossier central.
+- Agent Skills : cree un lien symbolique `.skills` vers le dossier central `-agent`.
 
 ## ⚙️ Reglages
 
@@ -49,7 +49,7 @@ Aucun reglage dedie. Les couleurs de la status bar utilisent :
 - Afficher les secrets exposes
 - Rescanner les secrets
 - Commit (verification secrets)
-- Create Skills Symlink
+- Agent Skills
 
 ## 📦 Build & Package
 
@@ -61,10 +61,16 @@ npm run release
 ## 🧪 Installation (Antigravity)
 
 - Palette de commandes : "Extensions: Install from VSIX..."
-- Selectionner `release/vs-pkvsconf-0.3.37.vsix`
+- Selectionner `release/vs-pkvsconf-1.37.0.vsix`
 - Recharger la fenetre
 
 ## 🧾 Release Notes
+
+### 1.37
+
+- 🔗 Le bouton devient `Agent Skills` et cree maintenant le symlink `.skills` vers le dossier central `-agent`.
+- 🛡️ `.agent/` et les patterns de secrets locaux sont ignores par Git pour eviter les commits accidentels.
+- 🔗 Ajout d'un lien direct vers la page Marketplace dans le README.
 
 ### 0.3.37
 
@@ -131,3 +137,4 @@ npm run release
 ## 🔗 Liens
 
 - EN README : README_en.md
+- VS Code Marketplace : https://marketplace.visualstudio.com/items?itemName=Cmondary.vs-pkvsconf

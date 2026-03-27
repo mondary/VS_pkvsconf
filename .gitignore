@@ -4,12 +4,23 @@ extension/node_modules/
 openspec/
 Icon
 .claude/
+.agent/
 .skills/
 .vscode/
-AGENTS.md
 skill_*.md
 release/
 releases/
 .github/workflows/
 fake-secrets.env
 PUBLISH.md
+
+# Secrets and local credentials
+.env
+.env.*
+*.env
+*.env.*
+*.pem
+*.key
+*credentials*
+secrets/
+**/secrets/
