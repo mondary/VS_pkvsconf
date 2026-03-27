@@ -17,6 +17,7 @@
 - 🎨 Couleur de title bar par workspace
 - 🔐 Detection des secrets exposes
 - 🛡️ Blocage de commit avec secrets
+- 🚀 Launchpad projets (liste + bascule rapide)
 - 🔗 Agent Skills : symlink `.agent` vers le dossier central `-agent`
 ## 🧠 Utilisation
 
@@ -29,6 +30,7 @@
 - Title bar : couleur auto par workspace, bouton pour regenerer.
 - Secrets : scan workspace + blocage de commit si secrets staged.
 - Agent Skills : cree un lien symbolique `.agent` vers le dossier central `-agent`.
+- Launchpad : ouvre un projet du launchpad, icône fusée dans la barre de status, vue dans l'explorateur, raccourci `Cmd/Ctrl+Alt+L`.
 
 ## ⚙️ Reglages
 
@@ -61,10 +63,16 @@ npm run release
 ## 🧪 Installation (Antigravity)
 
 - Palette de commandes : "Extensions: Install from VSIX..."
-- Selectionner `release/vs-pkvsconf-1.40.0.vsix`
+- Selectionner `release/vs-pkvsconf-2.0.0.vsix`
 - Recharger la fenetre
 
 ## 🧾 Release Notes
+
+### 2.0.0
+
+- 🚀 Launchpad projets : vue explorateur + statut bar + raccourci pour ouvrir/basculer entre projets.
+- 🗂️ Deux sections : projets en cours et projets du launchpad (config `pkvsconf.launchpad.projects`).
+- 🔍 Commande pour ajouter le workspace courant au launchpad.
 
 ### 1.40.0
 

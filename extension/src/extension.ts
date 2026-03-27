@@ -9,8 +9,144 @@ const SIZE_UNITS = ["KB", "MB", "GB", "TB"] as const;
 const ICON_PREFIX = "icon.";
 const VIEW_ID = "projectIconView";
 const EXTENSION_TAGS_VIEW_ID = "extensionTagsView";
+const LAUNCHPAD_VIEW_ID = "launchpadView";
 const EXTENSION_TAGS_STORAGE_KEY = "extensionTags";
 const WORKSPACE_TITLEBAR_COLOR_KEY = "workspaceTitlebarColor";
+
+type LaunchpadProject = {
+  name: string;
+  path: string;
+};
+
+type LaunchpadGroup = "current" | "all";
+
+class LaunchpadTreeItem extends vscode.TreeItem {
+  constructor(
+    label: string,
+    collapsibleState: vscode.TreeItemCollapsibleState,
+    public readonly group: LaunchpadGroup | undefined,
+    public readonly project: LaunchpadProject | undefined
+  ) {
+    super(label, collapsibleState);
+    if (project) {
+      this.iconPath = new vscode.ThemeIcon("folder");
+      this.contextValue = "launchpadProject";
+      this.tooltip = project.path;
+      this.command = {
+        command: "pkvsconf.launchpadOpen",
+        title: "Ouvrir le projet",
+        arguments: [project]
+      };
+    }
+  }
+}
+
+class LaunchpadTreeProvider implements vscode.TreeDataProvider<LaunchpadTreeItem> {
+  private _onDidChangeTreeData = new vscode.EventEmitter<LaunchpadTreeItem | void>();
+  readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
+
+  refresh(): void {
+    this._onDidChangeTreeData.fire();
+  }
+
+  getTreeItem(element: LaunchpadTreeItem): vscode.TreeItem {
+    return element;
+  }
+
+  getChildren(element?: LaunchpadTreeItem): vscode.ProviderResult<LaunchpadTreeItem[]> {
+    const configProjects = getLaunchpadProjects();
+    if (!element) {
+      return [
+        new LaunchpadTreeItem("En cours", vscode.TreeItemCollapsibleState.Expanded, "current", undefined),
+        new LaunchpadTreeItem("Launchpad", vscode.TreeItemCollapsibleState.Expanded, "all", undefined)
+      ];
+    }
+
+    if (element.group === "current") {
+      const workspaces = vscode.workspace.workspaceFolders ?? [];
+      return workspaces.map(
+        (ws) =>
+          new LaunchpadTreeItem(
+            path.basename(ws.uri.fsPath),
+            vscode.TreeItemCollapsibleState.None,
+            undefined,
+            { name: path.basename(ws.uri.fsPath), path: ws.uri.fsPath }
+          )
+      );
+    }
+
+    if (element.group === "all") {
+      return configProjects.map(
+        (p) => new LaunchpadTreeItem(p.name || path.basename(p.path), vscode.TreeItemCollapsibleState.None, undefined, p)
+      );
+    }
+
+    return [];
+  }
+}
+
+function getLaunchpadProjects(): LaunchpadProject[] {
+  const cfg = vscode.workspace.getConfiguration("pkvsconf").get<LaunchpadProject[]>("launchpad.projects");
+  if (!cfg || !Array.isArray(cfg)) {
+    return [];
+  }
+  return cfg.filter((p) => p?.path);
+}
+
+async function addCurrentWorkspaceToLaunchpad() {
+  const ws = vscode.workspace.workspaceFolders?.[0];
+  if (!ws) {
+    vscode.window.showWarningMessage("Aucun workspace ouvert.");
+    return;
+  }
+  const projects = getLaunchpadProjects();
+  if (projects.some((p) => path.normalize(p.path) === path.normalize(ws.uri.fsPath))) {
+    vscode.window.showInformationMessage("Ce workspace est déjà dans le Launchpad.");
+    return;
+  }
+  projects.push({ name: path.basename(ws.uri.fsPath), path: ws.uri.fsPath });
+  await vscode.workspace
+    .getConfiguration("pkvsconf")
+    .update("launchpad.projects", projects, vscode.ConfigurationTarget.Global);
+  vscode.window.showInformationMessage("Projet ajouté au Launchpad.");
+}
+
+async function openLaunchpadQuickPick() {
+  const projects = getLaunchpadProjects();
+  if (!projects.length) {
+    vscode.window.showWarningMessage("Aucun projet dans le Launchpad. Ajoutez-en un via la commande dédiée.");
+    return;
+  }
+  const pick = await vscode.window.showQuickPick(
+    projects.map((p) => ({ label: p.name || path.basename(p.path), description: p.path, project: p })),
+    { placeHolder: "Ouvrir un projet du Launchpad" }
+  );
+  if (pick?.project) {
+    await openProjectInNewWindow(pick.project.path);
+  }
+}
+
+async function openProjectInNewWindow(projectPath: string) {
+  const uri = vscode.Uri.file(projectPath);
+  await vscode.commands.executeCommand("vscode.openFolder", uri, true);
+}
+
+async function revealProjectInFinder(project?: LaunchpadProject) {
+  const target = project ?? (await pickProjectForAction("Révéler dans le Finder"));
+  if (!target) {
+    return;
+  }
+  await vscode.env.openExternal(vscode.Uri.file(target.path));
+}
+
+async function pickProjectForAction(placeHolder: string): Promise<LaunchpadProject | undefined> {
+  const projects = getLaunchpadProjects();
+  const pick = await vscode.window.showQuickPick(
+    projects.map((p) => ({ label: p.name || path.basename(p.path), description: p.path, project: p })),
+    { placeHolder }
+  );
+  return pick?.project;
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // SECRETS DETECTION
@@ -1602,6 +1738,7 @@ export function activate(context: vscode.ExtensionContext) {
     tagsStore,
     context.extensionUri
   );
+  const launchpadProvider = new LaunchpadTreeProvider();
 
   const updateWorkspace = async () => {
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
@@ -1637,6 +1774,16 @@ export function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(EXTENSION_TAGS_VIEW_ID, categoriesProvider)
+  );
+  context.subscriptions.push(
+    vscode.window.registerTreeDataProvider(LAUNCHPAD_VIEW_ID, launchpadProvider)
+  );
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration((event) => {
+      if (event.affectsConfiguration("pkvsconf.launchpad.projects")) {
+        launchpadProvider.refresh();
+      }
+    })
   );
 
   void updateWorkspace();
@@ -1696,6 +1843,15 @@ export function activate(context: vscode.ExtensionContext) {
   skillsSymlinkItem.tooltip = "Créer un lien symbolique .agent vers le dossier -agent";
   skillsSymlinkItem.command = "pkvsconf.createSkillsSymlink";
   skillsSymlinkItem.show();
+
+  const launchpadItem = vscode.window.createStatusBarItem(
+    vscode.StatusBarAlignment.Left,
+    95
+  );
+  launchpadItem.text = "$(rocket) Launchpad";
+  launchpadItem.tooltip = "Ouvrir le Launchpad projets";
+  launchpadItem.command = "pkvsconf.launchpadOpen";
+  launchpadItem.show();
 
   const secretScanner = new SecretScanner(secretsItem);
   let secretsWatcher: vscode.FileSystemWatcher | undefined;
@@ -1907,6 +2063,32 @@ export function activate(context: vscode.ExtensionContext) {
 
       await tagsStore.setTagsForExtension(extension.id, newCategory);
       categoriesProvider.refresh();
+    }
+  );
+
+  const launchpadOpenCmd = vscode.commands.registerCommand(
+    "pkvsconf.launchpadOpen",
+    async (project?: LaunchpadProject) => {
+      if (project) {
+        await openProjectInNewWindow(project.path);
+        return;
+      }
+      await openLaunchpadQuickPick();
+    }
+  );
+
+  const launchpadAddCmd = vscode.commands.registerCommand(
+    "pkvsconf.launchpadAddCurrent",
+    async () => {
+      await addCurrentWorkspaceToLaunchpad();
+      launchpadProvider.refresh();
+    }
+  );
+
+  const launchpadRevealCmd = vscode.commands.registerCommand(
+    "pkvsconf.launchpadRevealInFinder",
+    async (project?: LaunchpadProject) => {
+      await revealProjectInFinder(project);
     }
   );
 
@@ -2377,7 +2559,16 @@ export function activate(context: vscode.ExtensionContext) {
     }
   );
 
-  context.subscriptions.push(cmd, refreshCmd, openRepoCmd, rootSizeItem, previewItem, titlebarColorItem, secretsItem);
+  context.subscriptions.push(
+    cmd,
+    refreshCmd,
+    openRepoCmd,
+    rootSizeItem,
+    previewItem,
+    titlebarColorItem,
+    secretsItem,
+    launchpadItem
+  );
   context.subscriptions.push(
     manageCategoryCmd,
     searchExtensionsCmd,
@@ -2387,7 +2578,10 @@ export function activate(context: vscode.ExtensionContext) {
     rescanSecretsCmd,
     commitWithSecretCheckCmd,
     createSkillsSymlinkCmd,
-    skillsSymlinkItem
+    skillsSymlinkItem,
+    launchpadOpenCmd,
+    launchpadAddCmd,
+    launchpadRevealCmd
   );
 
   void refreshRootSize();

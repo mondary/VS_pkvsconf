@@ -2,7 +2,7 @@
   "name": "vs-pkvsconf",
   "displayName": "VS_pkvsconf",
   "description": "Adds a toolbar button in Explorer to reveal the active file in Finder.",
-  "version": "1.40.0",
+  "version": "2.0.0",
   "publisher": "Cmondary",
   "icon": "icon.png",
   "license": "MIT",
@@ -29,8 +29,12 @@
     "onCommand:pkvsconf.rescanSecrets",
     "onCommand:pkvsconf.commitWithSecretCheck",
     "onCommand:pkvsconf.createSkillsSymlink",
+    "onCommand:pkvsconf.launchpadOpen",
+    "onCommand:pkvsconf.launchpadAddCurrent",
+    "onCommand:pkvsconf.launchpadRevealInFinder",
     "onView:projectIconView",
     "onView:extensionTagsView",
+    "onView:launchpadView",
     "onStartupFinished"
   ],
   "main": "./dist/extension.js",
@@ -99,6 +103,21 @@
         "command": "pkvsconf.createSkillsSymlink",
         "title": "Agent Skills",
         "icon": "$(link-external)"
+      },
+      {
+        "command": "pkvsconf.launchpadOpen",
+        "title": "Launchpad projets",
+        "icon": "$(rocket)"
+      },
+      {
+        "command": "pkvsconf.launchpadAddCurrent",
+        "title": "Ajouter le projet courant au Launchpad",
+        "icon": "$(add)"
+      },
+      {
+        "command": "pkvsconf.launchpadRevealInFinder",
+        "title": "Révéler le projet dans le Finder",
+        "icon": "$(folder-opened)"
       }
     ],
     "colors": [
@@ -128,6 +147,11 @@
           "name": "Project Icon",
           "type": "webview",
           "collapsed": false
+        },
+        {
+          "id": "launchpadView",
+          "name": "Launchpad Projets",
+          "type": "tree"
         }
       ],
       "extensionTagsContainer": [
@@ -135,6 +159,13 @@
           "id": "extensionTagsView",
           "name": "PK Extensions",
           "type": "webview"
+        }
+      ],
+      "launchpadContainer": [
+        {
+          "id": "launchpadView",
+          "name": "Launchpad Projets",
+          "type": "tree"
         }
       ]
     },
@@ -183,6 +214,16 @@
           "group": "navigation"
         },
         {
+          "command": "pkvsconf.launchpadOpen",
+          "when": "view == workbench.explorer.fileView",
+          "group": "navigation"
+        },
+        {
+          "command": "pkvsconf.launchpadAddCurrent",
+          "when": "view == workbench.explorer.fileView",
+          "group": "navigation"
+        },
+        {
           "command": "revealInFinderButton.openGitHubRepo",
           "when": "view == workbench.scm",
           "group": "navigation"
@@ -198,6 +239,16 @@
           "command": "pkvsconf.addTagToExtension",
           "when": "view == extensionTagsView && viewItem == extensionListItem",
           "group": "inline"
+        },
+        {
+          "command": "pkvsconf.launchpadOpen",
+          "when": "view == launchpadView && viewItem == launchpadProject",
+          "group": "navigation"
+        },
+        {
+          "command": "pkvsconf.launchpadRevealInFinder",
+          "when": "view == launchpadView && viewItem == launchpadProject",
+          "group": "inline"
         }
       ]
     },
@@ -207,8 +258,23 @@
         "key": "ctrl+shift+enter",
         "mac": "cmd+shift+enter",
         "when": "scmRepository"
+      },
+      {
+        "command": "pkvsconf.launchpadOpen",
+        "key": "ctrl+alt+l",
+        "mac": "cmd+alt+l"
       }
     ]
+  },
+  "configuration": {
+    "title": "PK VS Conf",
+    "properties": {
+      "pkvsconf.launchpad.projects": {
+        "type": "array",
+        "default": [],
+        "description": "Liste des projets du launchpad. Chaque entrée : { \"name\": \"MonProjet\", \"path\": \"/Users/xxx/Projet\" }"
+      }
+    }
   },
   "scripts": {
     "build": "tsc -p .",
