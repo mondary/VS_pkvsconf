@@ -62,10 +62,15 @@ npm run release
 ## 🧪 Install (Antigravity)
 
 - Command Palette: "Extensions: Install from VSIX..."
-- Select `release/vs-pkvsconf-1.37.0.vsix`
+- Select `release/vs-pkvsconf-1.38.0.vsix`
 - Reload window
 
 ## 🧾 Changelog
+
+### 1.38
+
+- 📝 Added `extension/README.md` so the Visual Studio Marketplace overview is populated correctly.
+- 🔗 Added the publisher store page link to the README.
 
 ### 1.37
 
@@ -139,3 +144,4 @@ npm run release
 
 - FR README : README.md
 - VS Code Marketplace : https://marketplace.visualstudio.com/items?itemName=Cmondary.vs-pkvsconf
+- Publisher Marketplace : https://marketplace.visualstudio.com/publishers/Cmondary
