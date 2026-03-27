@@ -17,7 +17,7 @@
 - 🎨 Workspace title bar color
 - 🔐 Exposed secrets detection
 - 🛡️ Commit blocking with secrets
-- 🔗 Agent Skills: `.skills` symlink to the central `-agent` folder
+- 🔗 Agent Skills: `.agent` symlink to the central `-agent` folder
 
 ## 🧠 Usage
 
@@ -29,7 +29,7 @@
 - Page preview: status bar button, PHP supported with auto server.
 - Title bar: auto color per workspace, button to regenerate.
 - Secrets: workspace scan + block commit if staged secrets.
-- Agent Skills: create a `.skills` symlink to the central `-agent` folder.
+- Agent Skills: create a `.agent` symlink to the central `-agent` folder.
 
 ## ⚙️ Settings
 
@@ -62,10 +62,16 @@ npm run release
 ## 🧪 Install (Antigravity)
 
 - Command Palette: "Extensions: Install from VSIX..."
-- Select `release/vs-pkvsconf-1.39.0.vsix`
+- Select `release/vs-pkvsconf-1.39.1.vsix`
 - Reload window
 
 ## 🧾 Changelog
+
+### 1.39.1
+
+- 🔗 The `Agent Skills` button now creates a `.agent` symlink to `-agent`.
+- 🔁 If `.agent` already exists but points elsewhere, the symlink is replaced automatically.
+- ✅ If `.agent` already points to `-agent`, the extension reports that it is already present.
 
 ### 1.39
 
@@ -78,7 +84,7 @@ npm run release
 
 ### 1.37
 
-- 🔗 The button is now `Agent Skills` and creates the `.skills` symlink to the central `-agent` folder.
+- 🔗 The button is now `Agent Skills` and creates the `.agent` symlink to the central `-agent` folder.
 - 🛡️ `.agent/` and local secret patterns are ignored by Git to reduce accidental commits.
 - 🔗 Added a direct link to the Marketplace page in the README.
 

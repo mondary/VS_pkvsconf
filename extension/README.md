@@ -17,7 +17,7 @@
 - 🎨 Couleur de title bar par workspace
 - 🔐 Detection des secrets exposes
 - 🛡️ Blocage de commit avec secrets
-- 🔗 Agent Skills : symlink `.skills` vers le dossier central `-agent`
+- 🔗 Agent Skills : symlink `.agent` vers le dossier central `-agent`
 ## 🧠 Utilisation
 
 - Reveal in Finder : bouton en haut du panneau Explorer (macOS).
@@ -28,7 +28,7 @@
 - Preview page : bouton en status bar, support PHP avec serveur auto.
 - Title bar : couleur auto par workspace, bouton pour regenerer.
 - Secrets : scan workspace + blocage de commit si secrets staged.
-- Agent Skills : cree un lien symbolique `.skills` vers le dossier central `-agent`.
+- Agent Skills : cree un lien symbolique `.agent` vers le dossier central `-agent`.
 
 ## ⚙️ Reglages
 
@@ -61,10 +61,20 @@ npm run release
 ## 🧪 Installation (Antigravity)
 
 - Palette de commandes : "Extensions: Install from VSIX..."
-- Selectionner `release/vs-pkvsconf-1.38.0.vsix`
+- Selectionner `release/vs-pkvsconf-1.39.1.vsix`
 - Recharger la fenetre
 
 ## 🧾 Release Notes
+
+### 1.39.1
+
+- 🔗 Le bouton `Agent Skills` cree maintenant un symlink `.agent` vers `-agent`.
+- 🔁 Si `.agent` existe deja mais pointe ailleurs, le lien est remplace automatiquement.
+- ✅ Si `.agent` pointe deja vers `-agent`, un message indique qu'il est deja present.
+
+### 1.39
+
+- 📝 Alignement du `extension/README.md` sur le meme contenu que le README GitHub.
 
 ### 1.38
 
@@ -73,7 +83,7 @@ npm run release
 
 ### 1.37
 
-- 🔗 Le bouton devient `Agent Skills` et cree maintenant le symlink `.skills` vers le dossier central `-agent`.
+- 🔗 Le bouton devient `Agent Skills` et cree maintenant le symlink `.agent` vers le dossier central `-agent`.
 - 🛡️ `.agent/` et les patterns de secrets locaux sont ignores par Git pour eviter les commits accidentels.
 - 🔗 Ajout d'un lien direct vers la page Marketplace dans le README.
 

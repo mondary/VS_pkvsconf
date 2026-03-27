@@ -5,7 +5,6 @@ openspec/
 Icon
 .claude/
 .agent/
-.skills/
 .vscode/
 skill_*.md
 release/

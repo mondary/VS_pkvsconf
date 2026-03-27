@@ -1693,7 +1693,7 @@ export function activate(context: vscode.ExtensionContext) {
     96
   );
   skillsSymlinkItem.text = "$(link) Agent Skills";
-  skillsSymlinkItem.tooltip = "Créer un lien symbolique .skills vers le dossier -agent";
+  skillsSymlinkItem.tooltip = "Créer un lien symbolique .agent vers le dossier -agent";
   skillsSymlinkItem.command = "pkvsconf.createSkillsSymlink";
   skillsSymlinkItem.show();
 
@@ -2294,10 +2294,10 @@ export function activate(context: vscode.ExtensionContext) {
       const workspaceRoot = workspaceFolder.uri.fsPath;
       const username = process.env.USER || process.env.USERNAME || "clm";
       const sourcePath = `/Users/${username}/Documents/GitHub/-agent`;
-      const targetPath = path.join(workspaceRoot, ".skills");
+      const targetPath = path.join(workspaceRoot, ".agent");
 
       const gitignorePath = path.join(workspaceRoot, ".gitignore");
-      const gitignoreEntry = ".skills";
+      const gitignoreEntry = ".agent";
 
       const ensureGitignoreHasSkills = async () => {
         try {
@@ -2321,15 +2321,23 @@ export function activate(context: vscode.ExtensionContext) {
       };
 
       let symlinkCreated = false;
+      let symlinkUpdated = false;
 
-      // Vérifier si le symlink existe déjà
+      // Vérifier si le symlink existe déjà et s'il pointe vers la bonne cible
       try {
         const targetStats = await fs.lstat(targetPath);
         if (!targetStats.isSymbolicLink()) {
           vscode.window.showErrorMessage(
-            "Un fichier ou dossier '.skills' existe déjà et n'est pas un lien symbolique."
+            "Un fichier ou dossier '.agent' existe déjà et n'est pas un lien symbolique."
           );
           return;
+        }
+
+        const existingLinkTarget = await fs.readlink(targetPath);
+        if (existingLinkTarget !== sourcePath) {
+          await fs.unlink(targetPath);
+          await fs.symlink(sourcePath, targetPath, "dir");
+          symlinkUpdated = true;
         }
       } catch (error: any) {
         if (error.code !== "ENOENT") {
@@ -2361,8 +2369,10 @@ export function activate(context: vscode.ExtensionContext) {
 
       vscode.window.showInformationMessage(
         symlinkCreated
-          ? "Lien symbolique '.skills' créé et .gitignore mis à jour."
-          : "Lien symbolique '.skills' déjà présent. .gitignore mis à jour."
+          ? "Lien symbolique '.agent' créé vers '-agent' et .gitignore mis à jour."
+          : symlinkUpdated
+            ? "Lien symbolique '.agent' mis à jour vers '-agent' et .gitignore mis à jour."
+            : "Lien symbolique '.agent' déjà présent vers '-agent'. .gitignore mis à jour."
       );
     }
   );
