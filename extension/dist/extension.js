@@ -53,6 +53,15 @@ async function addFolderToLaunchpad() {
         .update("launchpad.projects", projects, vscode.ConfigurationTarget.Global);
     vscode.window.showInformationMessage("Projet ajouté au Launchpad.");
 }
+function getLaunchpadViewMode() {
+    const cfg = vscode.workspace.getConfiguration("pkvsconf").get("launchpad.viewMode");
+    return cfg === "mini" ? "mini" : "grid";
+}
+async function setLaunchpadViewMode(mode) {
+    await vscode.workspace
+        .getConfiguration("pkvsconf")
+        .update("launchpad.viewMode", mode, vscode.ConfigurationTarget.Global);
+}
 async function addCurrentWorkspaceToLaunchpad() {
     const ws = vscode.workspace.workspaceFolders?.[0];
     if (!ws) {
@@ -129,11 +138,18 @@ async function buildLaunchpadHtml(webview, projects) {
         path: p.path,
         icon: await getProjectIcon(p)
     })));
-    const cardsHtml = cards
+    const viewMode = getLaunchpadViewMode();
+    const gridCardsHtml = cards
         .map((c) => `
-        <button class="card" data-path="${c.path}">
+        <button class="card" data-path="${c.path}" title="${c.name}">
           <img src="${c.icon}" alt="${c.name}" />
           <div class="name">${c.name}</div>
+        </button>`)
+        .join("");
+    const miniItemsHtml = cards
+        .map((c) => `
+        <button class="miniItem" data-path="${c.path}" type="button" aria-label="${c.name}" title="${c.name}">
+          <img src="${c.icon}" alt="${c.name}" />
         </button>`)
         .join("");
     const nonce = getNonce();
@@ -169,6 +185,11 @@ async function buildLaunchpadHtml(webview, projects) {
           color: var(--vscode-descriptionForeground);
           letter-spacing: 0.2px;
           user-select: none;
+        }
+        .actions {
+          display: inline-flex;
+          gap: 6px;
+          align-items: center;
         }
         .iconBtn {
           border: 1px solid var(--vscode-editorWidget-border, #4444);
@@ -223,30 +244,90 @@ async function buildLaunchpadHtml(webview, projects) {
           color: var(--vscode-foreground);
           word-break: break-word;
         }
+        .miniRow {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          overflow-x: auto;
+          padding: 2px 0;
+        }
+        .miniItem {
+          border: none;
+          background: transparent;
+          height: 32px;
+          width: 32px;
+          padding: 0;
+          border-radius: 8px;
+          cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .miniItem:hover {
+          background: var(--vscode-list-hoverBackground);
+        }
+        .miniItem img {
+          height: 32px;
+          width: 32px;
+          object-fit: contain;
+          border-radius: 6px;
+          background: transparent;
+        }
+        .miniAdd {
+          border: 1px dashed var(--vscode-editorWidget-border, #4444);
+          background: transparent;
+          height: 32px;
+          width: 32px;
+          padding: 0;
+          border-radius: 8px;
+          cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          color: var(--vscode-foreground);
+          flex: 0 0 auto;
+        }
+        .miniAdd:hover {
+          background: var(--vscode-list-hoverBackground);
+        }
       </style>
     </head>
     <body>
       <div class="container">
         <div class="topbar">
-          <div class="title">Projets</div>
-          <button id="addBtn" class="iconBtn" type="button" aria-label="Ajouter un projet au Launchpad" title="Ajouter un projet">+</button>
+          <div class="title">Projets (${viewMode === "mini" ? "mini" : "grille"})</div>
+          <div class="actions">
+            <button id="toggleBtn" class="iconBtn" type="button" aria-label="Basculer le mode d'affichage" title="Basculer le mode">≡</button>
+            <button id="addBtn" class="iconBtn" type="button" aria-label="Ajouter un projet au Launchpad" title="Ajouter un projet">+</button>
+          </div>
         </div>
-        <div class="grid">
-          ${cardsHtml}
-        </div>
+        ${viewMode === "mini"
+        ? `<div class="miniRow" role="list">
+                ${miniItemsHtml}
+                <button id="miniAddBtn" class="miniAdd" type="button" aria-label="Ajouter un projet au Launchpad" title="Ajouter un projet">+</button>
+              </div>`
+        : `<div class="grid">
+                ${gridCardsHtml}
+              </div>`}
       </div>
       <script nonce="${nonce}">
         const vscode = acquireVsCodeApi();
         document.getElementById('addBtn')?.addEventListener('click', () => {
           vscode.postMessage({ command: 'add' });
         });
-        document.querySelectorAll('.card').forEach(card => {
-          card.addEventListener('click', () => {
-            vscode.postMessage({ command: 'open', path: card.dataset.path });
+        document.getElementById('miniAddBtn')?.addEventListener('click', () => {
+          vscode.postMessage({ command: 'add' });
+        });
+        document.getElementById('toggleBtn')?.addEventListener('click', () => {
+          vscode.postMessage({ command: 'toggleMode' });
+        });
+        document.querySelectorAll('[data-path]').forEach(el => {
+          el.addEventListener('click', () => {
+            vscode.postMessage({ command: 'open', path: el.dataset.path });
           });
-          card.addEventListener('contextmenu', (e) => {
+          el.addEventListener('contextmenu', (e) => {
             e.preventDefault();
-            vscode.postMessage({ command: 'reveal', path: card.dataset.path });
+            vscode.postMessage({ command: 'reveal', path: el.dataset.path });
           });
         });
       </script>
@@ -270,6 +351,11 @@ class LaunchpadWebviewProvider {
             }
             else if (message.command === "add") {
                 await addFolderToLaunchpad();
+                await this.render(webviewView);
+            }
+            else if (message.command === "toggleMode") {
+                const nextMode = getLaunchpadViewMode() === "mini" ? "grid" : "mini";
+                await setLaunchpadViewMode(nextMode);
                 await this.render(webviewView);
             }
         });
@@ -1769,6 +1855,11 @@ function activate(context) {
         await addFolderToLaunchpad();
         await refreshLaunchpadViews();
     });
+    const launchpadToggleViewModeCmd = vscode.commands.registerCommand("pkvsconf.launchpadToggleViewMode", async () => {
+        const nextMode = getLaunchpadViewMode() === "mini" ? "grid" : "mini";
+        await setLaunchpadViewMode(nextMode);
+        await refreshLaunchpadViews();
+    });
     const launchpadRevealCmd = vscode.commands.registerCommand("pkvsconf.launchpadRevealInFinder", async (project) => {
         await revealProjectInFinder(project);
     });
@@ -2108,7 +2199,7 @@ function activate(context) {
                 : "Lien symbolique '.agent' déjà présent vers '-agent'. .gitignore mis à jour.");
     });
     context.subscriptions.push(cmd, refreshCmd, openRepoCmd, rootSizeItem, previewItem, titlebarColorItem, secretsItem, launchpadItem);
-    context.subscriptions.push(manageCategoryCmd, searchExtensionsCmd, regenerateTitlebarColorCmd, previewActivePageCmd, showSecretsCmd, rescanSecretsCmd, commitWithSecretCheckCmd, createSkillsSymlinkCmd, skillsSymlinkItem, launchpadOpenCmd, launchpadAddCmd, launchpadRevealCmd);
+    context.subscriptions.push(manageCategoryCmd, searchExtensionsCmd, regenerateTitlebarColorCmd, previewActivePageCmd, showSecretsCmd, rescanSecretsCmd, commitWithSecretCheckCmd, createSkillsSymlinkCmd, skillsSymlinkItem, launchpadOpenCmd, launchpadAddCmd, launchpadAddFolderCmd, launchpadToggleViewModeCmd, launchpadRevealCmd);
     void refreshRootSize();
     const refreshIntervalMs = 5 * 60 * 1000;
     const refreshInterval = setInterval(() => {

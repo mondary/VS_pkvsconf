@@ -2,7 +2,7 @@
   "name": "vs-pkvsconf",
   "displayName": "VS_pkvsconf",
   "description": "Adds a toolbar button in Explorer to reveal the active file in Finder.",
-  "version": "2.2.3",
+  "version": "2.2.4",
   "publisher": "Cmondary",
   "icon": "icon.png",
   "license": "MIT",
@@ -31,7 +31,9 @@
     "onCommand:pkvsconf.createSkillsSymlink",
     "onCommand:pkvsconf.launchpadOpen",
     "onCommand:pkvsconf.launchpadAddCurrent",
+    "onCommand:pkvsconf.launchpadAddFolder",
     "onCommand:pkvsconf.launchpadRevealInFinder",
+    "onCommand:pkvsconf.launchpadToggleViewMode",
     "onView:projectIconView",
     "onView:extensionTagsView",
     "onView:launchpadExplorerView",
@@ -46,6 +48,12 @@
           "type": "array",
           "default": [],
           "description": "Liste des projets du launchpad. Chaque entrée : { \"name\": \"MonProjet\", \"path\": \"/Users/xxx/Projet\" }"
+        },
+        "pkvsconf.launchpad.viewMode": {
+          "type": "string",
+          "default": "grid",
+          "enum": ["grid", "mini"],
+          "description": "Mode d'affichage du Launchpad: 'grid' (tuiles) ou 'mini' (icônes 32x32 en ligne)."
         }
       }
     },
@@ -119,6 +127,11 @@
         "command": "pkvsconf.launchpadRevealInFinder",
         "title": "Révéler le projet dans le Finder",
         "icon": "$(folder-opened)"
+      },
+      {
+        "command": "pkvsconf.launchpadToggleViewMode",
+        "title": "Launchpad: Basculer le mode d'affichage",
+        "icon": "$(layout)"
       }
     ],
     "colors": [
