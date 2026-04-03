@@ -9,7 +9,6 @@ const SIZE_UNITS = ["KB", "MB", "GB", "TB"] as const;
 const ICON_PREFIX = "icon.";
 const VIEW_ID = "projectIconView";
 const EXTENSION_TAGS_VIEW_ID = "extensionTagsView";
-const LAUNCHPAD_VIEW_ID = "launchpadView";
 const LAUNCHPAD_EXPLORER_VIEW_ID = "launchpadExplorerView";
 const EXTENSION_TAGS_STORAGE_KEY = "extensionTags";
 const WORKSPACE_TITLEBAR_COLOR_KEY = "workspaceTitlebarColor";
@@ -1928,9 +1927,6 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.window.registerWebviewViewProvider(EXTENSION_TAGS_VIEW_ID, categoriesProvider)
   );
   context.subscriptions.push(
-    vscode.window.registerWebviewViewProvider(LAUNCHPAD_VIEW_ID, launchpadProvider)
-  );
-  context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(LAUNCHPAD_EXPLORER_VIEW_ID, launchpadProvider)
   );
 
@@ -2215,14 +2211,6 @@ export function activate(context: vscode.ExtensionContext) {
   );
 
   async function refreshLaunchpadViews() {
-    const view1 = await vscode.commands.executeCommand<vscode.WebviewView>(
-      "workbench.views.getView",
-      LAUNCHPAD_VIEW_ID
-    );
-    if (view1) {
-      await launchpadProvider.render(view1);
-    }
-
     const view2 = await vscode.commands.executeCommand<vscode.WebviewView>(
       "workbench.views.getView",
       LAUNCHPAD_EXPLORER_VIEW_ID

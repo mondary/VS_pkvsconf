@@ -2,7 +2,7 @@
   "name": "vs-pkvsconf",
   "displayName": "VS_pkvsconf",
   "description": "Adds a toolbar button in Explorer to reveal the active file in Finder.",
-  "version": "2.2.1",
+  "version": "2.2.2",
   "publisher": "Cmondary",
   "icon": "icon.png",
   "license": "MIT",
@@ -34,7 +34,6 @@
     "onCommand:pkvsconf.launchpadRevealInFinder",
     "onView:projectIconView",
     "onView:extensionTagsView",
-    "onView:launchpadView",
     "onView:launchpadExplorerView",
     "onStartupFinished"
   ],
@@ -50,20 +49,6 @@
         }
       }
     },
-  "viewsContainers": {
-    "activitybar": [
-      {
-        "id": "extensionTagsContainer",
-        "title": "PK Extensions",
-        "icon": "$(tag)"
-      },
-      {
-        "id": "launchpadContainer",
-        "title": "Launchpad",
-        "icon": "$(rocket)"
-      }
-    ]
-  },
     "commands": [
       {
         "command": "revealInFinderButton.revealActive",
@@ -165,24 +150,15 @@
         "collapsed": false
       },
       {
+        "id": "extensionTagsView",
+        "name": "PK Extensions",
+        "type": "webview"
+      },
+      {
         "id": "launchpadExplorerView",
         "name": "Launchpad Projets",
         "type": "webview",
         "collapsed": false
-      }
-    ],
-    "extensionTagsContainer": [
-      {
-        "id": "extensionTagsView",
-        "name": "PK Extensions",
-        "type": "webview"
-      }
-    ],
-    "launchpadContainer": [
-      {
-        "id": "launchpadView",
-        "name": "Launchpad Projets",
-        "type": "webview"
       }
     ]
   },
@@ -259,12 +235,12 @@
         },
         {
           "command": "pkvsconf.launchpadOpen",
-          "when": "(view == launchpadView || view == launchpadExplorerView) && viewItem == launchpadProject",
+          "when": "view == launchpadExplorerView && viewItem == launchpadProject",
           "group": "navigation"
         },
         {
           "command": "pkvsconf.launchpadRevealInFinder",
-          "when": "(view == launchpadView || view == launchpadExplorerView) && viewItem == launchpadProject",
+          "when": "view == launchpadExplorerView && viewItem == launchpadProject",
           "group": "inline"
         }
       ]
