@@ -115,7 +115,15 @@ async function getProjectIcon(project) {
         return toDataUriFromSvg(initials, color);
     }
 }
-async function buildLaunchpadHtml(projects) {
+function getNonce() {
+    let text = "";
+    const possible = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    for (let i = 0; i < 32; i++) {
+        text += possible.charAt(Math.floor(Math.random() * possible.length));
+    }
+    return text;
+}
+async function buildLaunchpadHtml(webview, projects) {
     const cards = await Promise.all(projects.map(async (p) => ({
         name: p.name || path.basename(p.path),
         path: p.path,
@@ -128,10 +136,12 @@ async function buildLaunchpadHtml(projects) {
           <div class="name">${c.name}</div>
         </button>`)
         .join("");
+    const nonce = getNonce();
     return `<!DOCTYPE html>
   <html>
     <head>
       <meta charset="UTF-8" />
+      <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: https: ${webview.cspSource}; style-src 'unsafe-inline' ${webview.cspSource}; script-src 'nonce-${nonce}';" />
       <style>
         :root {
           color-scheme: ${vscode.window.activeColorTheme.kind === vscode.ColorThemeKind.Dark ? "dark" : "light"};
@@ -225,7 +235,7 @@ async function buildLaunchpadHtml(projects) {
           ${cardsHtml}
         </div>
       </div>
-      <script>
+      <script nonce="${nonce}">
         const vscode = acquireVsCodeApi();
         document.getElementById('addBtn')?.addEventListener('click', () => {
           vscode.postMessage({ command: 'add' });
@@ -267,7 +277,7 @@ class LaunchpadWebviewProvider {
     }
     async render(view) {
         const projects = getLaunchpadProjects();
-        view.webview.html = await buildLaunchpadHtml(projects);
+        view.webview.html = await buildLaunchpadHtml(view.webview, projects);
     }
 }
 const SECRET_PATTERNS = [

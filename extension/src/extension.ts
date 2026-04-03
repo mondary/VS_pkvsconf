@@ -136,7 +136,16 @@ async function getProjectIcon(project: LaunchpadProject): Promise<string> {
   }
 }
 
-async function buildLaunchpadHtml(projects: LaunchpadProject[]): Promise<string> {
+function getNonce(): string {
+  let text = "";
+  const possible = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  for (let i = 0; i < 32; i++) {
+    text += possible.charAt(Math.floor(Math.random() * possible.length));
+  }
+  return text;
+}
+
+async function buildLaunchpadHtml(webview: vscode.Webview, projects: LaunchpadProject[]): Promise<string> {
   const cards = await Promise.all(
     projects.map(async (p) => ({
       name: p.name || path.basename(p.path),
@@ -155,10 +164,13 @@ async function buildLaunchpadHtml(projects: LaunchpadProject[]): Promise<string>
     )
     .join("");
 
+  const nonce = getNonce();
+
   return `<!DOCTYPE html>
   <html>
     <head>
       <meta charset="UTF-8" />
+      <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: https: ${webview.cspSource}; style-src 'unsafe-inline' ${webview.cspSource}; script-src 'nonce-${nonce}';" />
       <style>
         :root {
           color-scheme: ${vscode.window.activeColorTheme.kind === vscode.ColorThemeKind.Dark ? "dark" : "light"};
@@ -252,7 +264,7 @@ async function buildLaunchpadHtml(projects: LaunchpadProject[]): Promise<string>
           ${cardsHtml}
         </div>
       </div>
-      <script>
+      <script nonce="${nonce}">
         const vscode = acquireVsCodeApi();
         document.getElementById('addBtn')?.addEventListener('click', () => {
           vscode.postMessage({ command: 'add' });
@@ -295,7 +307,7 @@ class LaunchpadWebviewProvider implements vscode.WebviewViewProvider {
 
   async render(view: vscode.WebviewView): Promise<void> {
     const projects = getLaunchpadProjects();
-    view.webview.html = await buildLaunchpadHtml(projects);
+    view.webview.html = await buildLaunchpadHtml(view.webview, projects);
   }
 }
 
