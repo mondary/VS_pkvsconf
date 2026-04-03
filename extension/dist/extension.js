@@ -304,7 +304,6 @@ async function buildLaunchpadHtml(webview, projects) {
         ${viewMode === "mini"
         ? `<div class="miniRow" role="list">
                 ${miniItemsHtml}
-                <button id="miniAddBtn" class="miniAdd" type="button" aria-label="Ajouter un projet au Launchpad" title="Ajouter un projet">+</button>
               </div>`
         : `<div class="grid">
                 ${gridCardsHtml}
@@ -313,9 +312,6 @@ async function buildLaunchpadHtml(webview, projects) {
       <script nonce="${nonce}">
         const vscode = acquireVsCodeApi();
         document.getElementById('addBtn')?.addEventListener('click', () => {
-          vscode.postMessage({ command: 'add' });
-        });
-        document.getElementById('miniAddBtn')?.addEventListener('click', () => {
           vscode.postMessage({ command: 'add' });
         });
         document.getElementById('toggleBtn')?.addEventListener('click', () => {
