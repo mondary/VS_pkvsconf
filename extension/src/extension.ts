@@ -283,7 +283,8 @@ async function buildLaunchpadHtml(webview: vscode.Webview, projects: LaunchpadPr
           display: flex;
           align-items: center;
           gap: 6px;
-          overflow-x: auto;
+          flex-wrap: wrap;
+          overflow: hidden;
           padding: 2px 0;
         }
         .miniItem {
