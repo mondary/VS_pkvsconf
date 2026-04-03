@@ -165,13 +165,13 @@ async function buildLaunchpadHtml(projects: LaunchpadProject[]): Promise<string>
         }
         body {
           margin: 0;
-          padding: 12px;
+          padding: 10px;
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
           background: var(--vscode-sideBar-background);
         }
         .container {
           width: 100%;
-          max-width: 820px;
+          max-width: 760px;
           margin: 0 auto;
         }
         .topbar {
@@ -179,7 +179,7 @@ async function buildLaunchpadHtml(projects: LaunchpadProject[]): Promise<string>
           align-items: center;
           justify-content: space-between;
           gap: 10px;
-          margin-bottom: 10px;
+          margin-bottom: 8px;
         }
         .title {
           font-size: 12px;
@@ -192,8 +192,8 @@ async function buildLaunchpadHtml(projects: LaunchpadProject[]): Promise<string>
           background: var(--vscode-editor-background);
           color: var(--vscode-foreground);
           border-radius: 10px;
-          height: 30px;
-          width: 30px;
+          height: 26px;
+          width: 26px;
           cursor: pointer;
           display: inline-flex;
           align-items: center;
@@ -210,15 +210,15 @@ async function buildLaunchpadHtml(projects: LaunchpadProject[]): Promise<string>
         }
         .grid {
           display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-          gap: 12px;
+          grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+          gap: 8px;
           width: 100%;
         }
         .card {
           border: none;
           background: var(--vscode-sideBar-background);
           border-radius: 12px;
-          padding: 12px;
+          padding: 10px;
           text-align: center;
           cursor: pointer;
           transition: transform 0.08s ease, box-shadow 0.08s ease;
@@ -228,15 +228,15 @@ async function buildLaunchpadHtml(projects: LaunchpadProject[]): Promise<string>
           box-shadow: 0 8px 18px rgba(0,0,0,0.12);
         }
         .card img {
-          width: 96px;
-          height: 96px;
+          width: 72px;
+          height: 72px;
           object-fit: contain;
           border-radius: 10px;
           background: transparent;
-          margin-bottom: 8px;
+          margin-bottom: 6px;
         }
         .name {
-          font-size: 13px;
+          font-size: 12px;
           color: var(--vscode-foreground);
           word-break: break-word;
         }
