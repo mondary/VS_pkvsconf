@@ -438,31 +438,13 @@ async function buildProjectNotesHtml(webview: vscode.Webview, initialContent: st
           text-overflow: ellipsis;
           white-space: nowrap;
         }
-        .actions {
-          display: inline-flex;
-          gap: 6px;
-          align-items: center;
-          flex: 0 0 auto;
-        }
-        .btn {
-          border: 1px solid var(--vscode-editorWidget-border, #4444);
-          background: var(--vscode-editor-background);
-          color: var(--vscode-foreground);
-          border-radius: 10px;
-          height: 26px;
-          padding: 0 10px;
-          cursor: pointer;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-        }
         textarea {
           width: 100%;
           min-height: 240px;
           height: calc(100vh - 70px);
           resize: none;
           box-sizing: border-box;
-          border: 1px solid var(--vscode-editorWidget-border, #4444);
+          border: none;
           background: var(--vscode-editor-background);
           color: var(--vscode-foreground);
           border-radius: 12px;
@@ -473,22 +455,59 @@ async function buildProjectNotesHtml(webview: vscode.Webview, initialContent: st
           outline: none;
         }
         textarea:focus {
-          border-color: var(--vscode-focusBorder);
+          outline: 1px solid var(--vscode-focusBorder);
+          outline-offset: 2px;
         }
       </style>
     </head>
     <body>
       <div class="topbar">
         <div class="title" title="${filePath}">${path.basename(filePath)}</div>
-        <div class="actions">
-          <button id="openBtn" class="btn" type="button" title="Ouvrir le fichier notes">Ouvrir</button>
-        </div>
       </div>
       <textarea id="notes" spellcheck="false" placeholder="Notes du projet (Markdown OK)…">${escaped}</textarea>
       <script nonce="${nonce}">
         const vscode = acquireVsCodeApi();
         const el = document.getElementById('notes');
-        const openBtn = document.getElementById('openBtn');
+
+        function isInsideFencedCodeBlock(text, cursorIndex) {
+          // simple heuristic: count fences before cursor (avoid backticks in this template literal)
+          const fence = String.fromCharCode(96, 96, 96);
+          const before = text.slice(0, cursorIndex);
+          const count = before.split(fence).length - 1;
+          return count % 2 === 1;
+        }
+
+        el.addEventListener('keydown', (e) => {
+          if (e.key !== 'Enter' || e.shiftKey || e.metaKey || e.ctrlKey || e.altKey) return;
+
+          const value = el.value;
+          const start = el.selectionStart;
+          const end = el.selectionEnd;
+          if (start !== end) return; // don't interfere with multi-line replace
+          if (isInsideFencedCodeBlock(value, start)) return;
+
+          // current line boundaries
+          const lineStart = value.lastIndexOf('\\n', start - 1) + 1;
+          const lineEnd = value.indexOf('\\n', start);
+          const currentLine = value.slice(lineStart, lineEnd === -1 ? value.length : lineEnd);
+
+          const trimmed = currentLine.trim();
+          if (!trimmed) return;
+
+          // continue list if line already a bullet, otherwise create one by default
+          const bulletMatch = currentLine.match(/^(\\s*)([-*]\\s+)/);
+          const indent = bulletMatch ? bulletMatch[1] : "";
+          const bullet = bulletMatch ? bulletMatch[2] : "- ";
+
+          e.preventDefault();
+          const insert = "\\n" + indent + bullet;
+          el.value = value.slice(0, start) + insert + value.slice(start);
+          const nextPos = start + insert.length;
+          el.selectionStart = nextPos;
+          el.selectionEnd = nextPos;
+
+          el.dispatchEvent(new Event('input', { bubbles: true }));
+        });
 
         let t = null;
         el.addEventListener('input', () => {
@@ -497,7 +516,6 @@ async function buildProjectNotesHtml(webview: vscode.Webview, initialContent: st
             vscode.postMessage({ command: 'save', content: el.value });
           }, 350);
         });
-        openBtn.addEventListener('click', () => vscode.postMessage({ command: 'openFile' }));
       </script>
     </body>
   </html>`;
@@ -554,15 +572,6 @@ class ProjectNotesViewProvider implements vscode.WebviewViewProvider {
 
       if (message.command === "save" && typeof message.content === "string") {
         await safeWriteTextFile(notesPath, message.content);
-      } else if (message.command === "openFile") {
-        await ensureDir(path.dirname(notesPath));
-        const uri = vscode.Uri.file(notesPath);
-        try {
-          await vscode.workspace.fs.stat(uri);
-        } catch {
-          await safeWriteTextFile(notesPath, "");
-        }
-        await vscode.window.showTextDocument(uri, { preview: false });
       }
     });
 
