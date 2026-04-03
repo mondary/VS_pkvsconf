@@ -12,6 +12,7 @@ const ICON_PREFIX = "icon.";
 const VIEW_ID = "projectIconView";
 const EXTENSION_TAGS_VIEW_ID = "extensionTagsView";
 const LAUNCHPAD_EXPLORER_VIEW_ID = "launchpadExplorerView";
+const PROJECT_NOTES_VIEW_ID = "projectNotesView";
 const EXTENSION_TAGS_STORAGE_KEY = "extensionTags";
 const WORKSPACE_TITLEBAR_COLOR_KEY = "workspaceTitlebarColor";
 function getLaunchpadProjects() {
@@ -131,6 +132,33 @@ function getNonce() {
         text += possible.charAt(Math.floor(Math.random() * possible.length));
     }
     return text;
+}
+function getWorkspaceRootFsPath() {
+    const ws = vscode.workspace.workspaceFolders?.[0];
+    if (!ws || ws.uri.scheme !== "file") {
+        return undefined;
+    }
+    return ws.uri.fsPath;
+}
+async function ensureDir(dirPath) {
+    try {
+        await fs.mkdir(dirPath, { recursive: true });
+    }
+    catch {
+        // ignore
+    }
+}
+async function safeReadTextFile(filePath) {
+    try {
+        return await fs.readFile(filePath, "utf8");
+    }
+    catch {
+        return "";
+    }
+}
+async function safeWriteTextFile(filePath, content) {
+    await ensureDir(path.dirname(filePath));
+    await fs.writeFile(filePath, content, "utf8");
 }
 async function buildLaunchpadHtml(webview, projects) {
     const cards = await Promise.all(projects.map(async (p) => ({
@@ -331,6 +359,107 @@ async function buildLaunchpadHtml(webview, projects) {
     </body>
   </html>`;
 }
+async function buildProjectNotesHtml(webview, initialContent, filePath) {
+    const nonce = getNonce();
+    const escaped = initialContent
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+    return `<!DOCTYPE html>
+  <html>
+    <head>
+      <meta charset="UTF-8" />
+      <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline' ${webview.cspSource}; script-src 'nonce-${nonce}';" />
+      <style>
+        :root {
+          color-scheme: ${vscode.window.activeColorTheme.kind === vscode.ColorThemeKind.Dark ? "dark" : "light"};
+        }
+        body {
+          margin: 0;
+          padding: 10px;
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+          background: var(--vscode-sideBar-background);
+          color: var(--vscode-foreground);
+        }
+        .topbar {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          margin-bottom: 8px;
+        }
+        .title {
+          font-size: 12px;
+          color: var(--vscode-descriptionForeground);
+          user-select: none;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .actions {
+          display: inline-flex;
+          gap: 6px;
+          align-items: center;
+          flex: 0 0 auto;
+        }
+        .btn {
+          border: 1px solid var(--vscode-editorWidget-border, #4444);
+          background: var(--vscode-editor-background);
+          color: var(--vscode-foreground);
+          border-radius: 10px;
+          height: 26px;
+          padding: 0 10px;
+          cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+        }
+        textarea {
+          width: 100%;
+          min-height: 240px;
+          height: calc(100vh - 70px);
+          resize: none;
+          box-sizing: border-box;
+          border: 1px solid var(--vscode-editorWidget-border, #4444);
+          background: var(--vscode-editor-background);
+          color: var(--vscode-foreground);
+          border-radius: 12px;
+          padding: 10px;
+          font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+          font-size: 12px;
+          line-height: 1.35;
+          outline: none;
+        }
+        textarea:focus {
+          border-color: var(--vscode-focusBorder);
+        }
+      </style>
+    </head>
+    <body>
+      <div class="topbar">
+        <div class="title" title="${filePath}">${path.basename(filePath)}</div>
+        <div class="actions">
+          <button id="openBtn" class="btn" type="button" title="Ouvrir le fichier notes">Ouvrir</button>
+        </div>
+      </div>
+      <textarea id="notes" spellcheck="false" placeholder="Notes du projet (Markdown OK)…">${escaped}</textarea>
+      <script nonce="${nonce}">
+        const vscode = acquireVsCodeApi();
+        const el = document.getElementById('notes');
+        const openBtn = document.getElementById('openBtn');
+
+        let t = null;
+        el.addEventListener('input', () => {
+          if (t) clearTimeout(t);
+          t = setTimeout(() => {
+            vscode.postMessage({ command: 'save', content: el.value });
+          }, 350);
+        });
+        openBtn.addEventListener('click', () => vscode.postMessage({ command: 'openFile' }));
+      </script>
+    </body>
+  </html>`;
+}
 class LaunchpadWebviewProvider {
     constructor(context) {
         this.context = context;
@@ -361,6 +490,47 @@ class LaunchpadWebviewProvider {
     async render(view) {
         const projects = getLaunchpadProjects();
         view.webview.html = await buildLaunchpadHtml(view.webview, projects);
+    }
+}
+class ProjectNotesViewProvider {
+    async resolveWebviewView(webviewView) {
+        this.currentView = webviewView;
+        webviewView.webview.options = {
+            enableScripts: true
+        };
+        webviewView.webview.onDidReceiveMessage(async (message) => {
+            const workspaceRoot = getWorkspaceRootFsPath();
+            if (!workspaceRoot) {
+                vscode.window.showWarningMessage("Aucun workspace local ouvert pour enregistrer les notes.");
+                return;
+            }
+            const notesPath = path.join(workspaceRoot, ".vscode", "pkvsconf-notes.md");
+            if (message.command === "save" && typeof message.content === "string") {
+                await safeWriteTextFile(notesPath, message.content);
+            }
+            else if (message.command === "openFile") {
+                await ensureDir(path.dirname(notesPath));
+                const uri = vscode.Uri.file(notesPath);
+                try {
+                    await vscode.workspace.fs.stat(uri);
+                }
+                catch {
+                    await safeWriteTextFile(notesPath, "");
+                }
+                await vscode.window.showTextDocument(uri, { preview: false });
+            }
+        });
+        await this.render(webviewView);
+    }
+    async render(view) {
+        const workspaceRoot = getWorkspaceRootFsPath();
+        if (!workspaceRoot) {
+            view.webview.html = await buildProjectNotesHtml(view.webview, "", ".vscode/pkvsconf-notes.md");
+            return;
+        }
+        const notesPath = path.join(workspaceRoot, ".vscode", "pkvsconf-notes.md");
+        const content = await safeReadTextFile(notesPath);
+        view.webview.html = await buildProjectNotesHtml(view.webview, content, notesPath);
     }
 }
 const SECRET_PATTERNS = [
@@ -1618,6 +1788,7 @@ function activate(context) {
     const tagsStore = new ExtensionTagsStore(context);
     const categoriesProvider = new ExtensionCategoriesWebviewProvider(tagsStore, context.extensionUri);
     const launchpadProvider = new LaunchpadWebviewProvider(context);
+    const notesProvider = new ProjectNotesViewProvider();
     const updateWorkspace = async () => {
         const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
         const workspaceRoot = workspaceFolder?.uri.fsPath;
@@ -1640,6 +1811,7 @@ function activate(context) {
     context.subscriptions.push(vscode.window.registerWebviewViewProvider(VIEW_ID, provider));
     context.subscriptions.push(vscode.window.registerWebviewViewProvider(EXTENSION_TAGS_VIEW_ID, categoriesProvider));
     context.subscriptions.push(vscode.window.registerWebviewViewProvider(LAUNCHPAD_EXPLORER_VIEW_ID, launchpadProvider));
+    context.subscriptions.push(vscode.window.registerWebviewViewProvider(PROJECT_NOTES_VIEW_ID, notesProvider));
     void updateWorkspace();
     context.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(() => {
         void updateWorkspace();
