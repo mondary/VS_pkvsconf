@@ -21,6 +21,38 @@ function getLaunchpadProjects() {
     }
     return cfg.filter((p) => p?.path);
 }
+async function addFolderToLaunchpad() {
+    const pick = await vscode.window.showOpenDialog({
+        canSelectFiles: false,
+        canSelectFolders: true,
+        canSelectMany: false,
+        openLabel: "Ajouter au Launchpad"
+    });
+    const folder = pick?.[0];
+    if (!folder) {
+        return;
+    }
+    const folderPath = folder.fsPath;
+    const projects = getLaunchpadProjects();
+    if (projects.some((p) => path.normalize(p.path) === path.normalize(folderPath))) {
+        vscode.window.showInformationMessage("Ce projet est déjà dans le Launchpad.");
+        return;
+    }
+    const defaultName = path.basename(folderPath);
+    const name = await vscode.window.showInputBox({
+        title: "Nom du projet",
+        prompt: "Nom affiché dans le Launchpad",
+        value: defaultName
+    });
+    if (name === undefined) {
+        return;
+    }
+    projects.push({ name: name.trim() || defaultName, path: folderPath });
+    await vscode.workspace
+        .getConfiguration("pkvsconf")
+        .update("launchpad.projects", projects, vscode.ConfigurationTarget.Global);
+    vscode.window.showInformationMessage("Projet ajouté au Launchpad.");
+}
 async function addCurrentWorkspaceToLaunchpad() {
     const ws = vscode.workspace.workspaceFolders?.[0];
     if (!ws) {
@@ -108,19 +140,56 @@ async function buildLaunchpadHtml(projects) {
           margin: 0;
           padding: 12px;
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+          background: var(--vscode-sideBar-background);
+        }
+        .container {
+          width: 100%;
+          max-width: 820px;
+          margin: 0 auto;
+        }
+        .topbar {
           display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          margin-bottom: 10px;
+        }
+        .title {
+          font-size: 12px;
+          color: var(--vscode-descriptionForeground);
+          letter-spacing: 0.2px;
+          user-select: none;
+        }
+        .iconBtn {
+          border: 1px solid var(--vscode-editorWidget-border, #4444);
+          background: var(--vscode-editor-background);
+          color: var(--vscode-foreground);
+          border-radius: 10px;
+          height: 30px;
+          width: 30px;
+          cursor: pointer;
+          display: inline-flex;
+          align-items: center;
           justify-content: center;
+          transition: transform 0.08s ease, box-shadow 0.08s ease;
+        }
+        .iconBtn:hover {
+          transform: translateY(-1px);
+          box-shadow: 0 8px 18px rgba(0,0,0,0.10);
+        }
+        .iconBtn:active {
+          transform: translateY(0px);
+          box-shadow: none;
         }
         .grid {
           display: grid;
           grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
           gap: 12px;
           width: 100%;
-          max-width: 820px; /* ~4 cartes par ligne avec gap */
         }
         .card {
-          border: 1px solid var(--vscode-editorWidget-border, #4444);
-          background: var(--vscode-editor-background);
+          border: none;
+          background: var(--vscode-sideBar-background);
           border-radius: 12px;
           padding: 12px;
           text-align: center;
@@ -129,14 +198,14 @@ async function buildLaunchpadHtml(projects) {
         }
         .card:hover {
           transform: translateY(-2px);
-          box-shadow: 0 8px 18px rgba(0,0,0,0.18);
+          box-shadow: 0 8px 18px rgba(0,0,0,0.12);
         }
         .card img {
           width: 96px;
           height: 96px;
           object-fit: contain;
           border-radius: 10px;
-          background: #1112;
+          background: transparent;
           margin-bottom: 8px;
         }
         .name {
@@ -147,11 +216,20 @@ async function buildLaunchpadHtml(projects) {
       </style>
     </head>
     <body>
-      <div class="grid">
-        ${cardsHtml}
+      <div class="container">
+        <div class="topbar">
+          <div class="title">Projets</div>
+          <button id="addBtn" class="iconBtn" type="button" aria-label="Ajouter un projet au Launchpad" title="Ajouter un projet">+</button>
+        </div>
+        <div class="grid">
+          ${cardsHtml}
+        </div>
       </div>
       <script>
         const vscode = acquireVsCodeApi();
+        document.getElementById('addBtn')?.addEventListener('click', () => {
+          vscode.postMessage({ command: 'add' });
+        });
         document.querySelectorAll('.card').forEach(card => {
           card.addEventListener('click', () => {
             vscode.postMessage({ command: 'open', path: card.dataset.path });
@@ -179,6 +257,10 @@ class LaunchpadWebviewProvider {
             }
             else if (message.command === "reveal" && message.path) {
                 await revealProjectInFinder({ name: path.basename(message.path), path: message.path });
+            }
+            else if (message.command === "add") {
+                await addFolderToLaunchpad();
+                await this.render(webviewView);
             }
         });
         await this.render(webviewView);
@@ -1665,6 +1747,13 @@ function activate(context) {
     });
     const launchpadAddCmd = vscode.commands.registerCommand("pkvsconf.launchpadAddCurrent", async () => {
         await addCurrentWorkspaceToLaunchpad();
+        const view = await vscode.commands.executeCommand("workbench.views.getView", LAUNCHPAD_VIEW_ID);
+        if (view) {
+            await launchpadProvider.render(view);
+        }
+    });
+    const launchpadAddFolderCmd = vscode.commands.registerCommand("pkvsconf.launchpadAddFolder", async () => {
+        await addFolderToLaunchpad();
         const view = await vscode.commands.executeCommand("workbench.views.getView", LAUNCHPAD_VIEW_ID);
         if (view) {
             await launchpadProvider.render(view);
