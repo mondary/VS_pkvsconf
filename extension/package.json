@@ -2,7 +2,7 @@
   "name": "vs-pkvsconf",
   "displayName": "VS_pkvsconf",
   "description": "Adds a toolbar button in Explorer to reveal the active file in Finder.",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "publisher": "Cmondary",
   "icon": "icon.png",
   "license": "MIT",
@@ -35,6 +35,7 @@
     "onView:projectIconView",
     "onView:extensionTagsView",
     "onView:launchpadView",
+    "onView:launchpadExplorerView",
     "onStartupFinished"
   ],
   "main": "./dist/extension.js",
@@ -162,6 +163,12 @@
         "name": "Project Icon",
         "type": "webview",
         "collapsed": false
+      },
+      {
+        "id": "launchpadExplorerView",
+        "name": "Launchpad Projets",
+        "type": "webview",
+        "collapsed": false
       }
     ],
     "extensionTagsContainer": [
@@ -252,12 +259,12 @@
         },
         {
           "command": "pkvsconf.launchpadOpen",
-          "when": "view == launchpadView && viewItem == launchpadProject",
+          "when": "(view == launchpadView || view == launchpadExplorerView) && viewItem == launchpadProject",
           "group": "navigation"
         },
         {
           "command": "pkvsconf.launchpadRevealInFinder",
-          "when": "view == launchpadView && viewItem == launchpadProject",
+          "when": "(view == launchpadView || view == launchpadExplorerView) && viewItem == launchpadProject",
           "group": "inline"
         }
       ]

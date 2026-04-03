@@ -10,6 +10,7 @@ const ICON_PREFIX = "icon.";
 const VIEW_ID = "projectIconView";
 const EXTENSION_TAGS_VIEW_ID = "extensionTagsView";
 const LAUNCHPAD_VIEW_ID = "launchpadView";
+const LAUNCHPAD_EXPLORER_VIEW_ID = "launchpadExplorerView";
 const EXTENSION_TAGS_STORAGE_KEY = "extensionTags";
 const WORKSPACE_TITLEBAR_COLOR_KEY = "workspaceTitlebarColor";
 
@@ -1929,6 +1930,9 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(LAUNCHPAD_VIEW_ID, launchpadProvider)
   );
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider(LAUNCHPAD_EXPLORER_VIEW_ID, launchpadProvider)
+  );
 
   void updateWorkspace();
 
@@ -2210,6 +2214,24 @@ export function activate(context: vscode.ExtensionContext) {
     }
   );
 
+  async function refreshLaunchpadViews() {
+    const view1 = await vscode.commands.executeCommand<vscode.WebviewView>(
+      "workbench.views.getView",
+      LAUNCHPAD_VIEW_ID
+    );
+    if (view1) {
+      await launchpadProvider.render(view1);
+    }
+
+    const view2 = await vscode.commands.executeCommand<vscode.WebviewView>(
+      "workbench.views.getView",
+      LAUNCHPAD_EXPLORER_VIEW_ID
+    );
+    if (view2) {
+      await launchpadProvider.render(view2);
+    }
+  }
+
   const launchpadOpenCmd = vscode.commands.registerCommand(
     "pkvsconf.launchpadOpen",
     async (project?: LaunchpadProject) => {
@@ -2225,13 +2247,7 @@ export function activate(context: vscode.ExtensionContext) {
     "pkvsconf.launchpadAddCurrent",
     async () => {
       await addCurrentWorkspaceToLaunchpad();
-      const view = await vscode.commands.executeCommand<vscode.WebviewView>(
-        "workbench.views.getView",
-        LAUNCHPAD_VIEW_ID
-      );
-      if (view) {
-        await launchpadProvider.render(view);
-      }
+      await refreshLaunchpadViews();
     }
   );
 
@@ -2239,13 +2255,7 @@ export function activate(context: vscode.ExtensionContext) {
     "pkvsconf.launchpadAddFolder",
     async () => {
       await addFolderToLaunchpad();
-      const view = await vscode.commands.executeCommand<vscode.WebviewView>(
-        "workbench.views.getView",
-        LAUNCHPAD_VIEW_ID
-      );
-      if (view) {
-        await launchpadProvider.render(view);
-      }
+      await refreshLaunchpadViews();
     }
   );
 
