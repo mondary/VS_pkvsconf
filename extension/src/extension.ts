@@ -4,6 +4,7 @@ import { Dirent } from "fs";
 import * as path from "path";
 import * as cp from "child_process";
 import * as net from "net";
+import * as os from "os";
 
 const SIZE_UNITS = ["KB", "MB", "GB", "TB"] as const;
 const ICON_PREFIX = "icon.";
@@ -13,6 +14,213 @@ const LAUNCHPAD_EXPLORER_VIEW_ID = "launchpadExplorerView";
 const PROJECT_NOTES_VIEW_ID = "projectNotesView";
 const EXTENSION_TAGS_STORAGE_KEY = "extensionTags";
 const WORKSPACE_TITLEBAR_COLOR_KEY = "workspaceTitlebarColor";
+const CODEX_RESUME_STORAGE_KEY = "codexResumeCommands";
+
+type CodexResumeEntry = {
+  id: string;
+  command: string; // e.g. "codex resume xxx"
+  label?: string;
+  createdAt: number; // epoch ms
+};
+
+function extractCodexResumeCommand(text: string): string | null {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+
+  const cmdMatch = trimmed.match(/\bcodex\s+resume\s+([^\s"'`]+)/i);
+  if (cmdMatch?.[1]) {
+    return `codex resume ${cmdMatch[1]}`;
+  }
+
+  // Allow pasting just the id/token
+  const idMatch = trimmed.match(/^([^\s"'`]+)$/);
+  if (idMatch?.[1]) {
+    return `codex resume ${idMatch[1]}`;
+  }
+
+  return null;
+}
+
+function getCodexResumeEntries(context: vscode.ExtensionContext): CodexResumeEntry[] {
+  const raw = context.globalState.get<unknown>(CODEX_RESUME_STORAGE_KEY);
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((v) => v as Partial<CodexResumeEntry>)
+    .filter((v) => typeof v?.command === "string" && typeof v?.createdAt === "number")
+    .map((v) => ({
+      id: typeof v.id === "string" && v.id ? v.id : (v.command as string).toLowerCase(),
+      command: (v.command as string).trim(),
+      label: typeof v.label === "string" ? v.label : undefined,
+      createdAt: v.createdAt as number
+    }));
+}
+
+async function addCodexResumeEntry(
+  context: vscode.ExtensionContext,
+  entry: Omit<CodexResumeEntry, "id">
+): Promise<CodexResumeEntry> {
+  const existing = getCodexResumeEntries(context);
+  const command = entry.command.trim();
+  const id = command.toLowerCase();
+  const next: CodexResumeEntry = { ...entry, command, id };
+
+  const deduped = existing.filter((e) => e.id !== id);
+  deduped.unshift(next);
+
+  await context.globalState.update(CODEX_RESUME_STORAGE_KEY, deduped.slice(0, 50));
+  return next;
+}
+
+type CodexSessionIndexEntry = {
+  id: string;
+  thread_name?: string;
+  updated_at?: string;
+};
+
+type CodexHistoryEntry = {
+  session_id: string;
+  ts: number;
+  text: string;
+};
+
+function tokenizeForMatch(text: string): string[] {
+  return text
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .split(" ")
+    .map((t) => t.trim())
+    .filter((t) => t.length >= 3 && t.length <= 40);
+}
+
+function scoreSession(queryTokens: Set<string>, docTokens: string[]): number {
+  if (queryTokens.size === 0 || docTokens.length === 0) return 0;
+  let hits = 0;
+  const seen = new Set<string>();
+  for (const t of docTokens) {
+    if (queryTokens.has(t) && !seen.has(t)) {
+      hits++;
+      seen.add(t);
+    }
+  }
+  return hits;
+}
+
+async function readCodexHistory(): Promise<CodexHistoryEntry[]> {
+  const historyPath = path.join(os.homedir(), ".codex", "history.jsonl");
+  try {
+    const content = await fs.readFile(historyPath, "utf8");
+    const entries: CodexHistoryEntry[] = [];
+    for (const line of content.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      try {
+        const obj = JSON.parse(trimmed) as Partial<CodexHistoryEntry>;
+        if (
+          typeof obj?.session_id === "string" &&
+          obj.session_id &&
+          typeof obj?.ts === "number" &&
+          typeof obj?.text === "string"
+        ) {
+          entries.push({
+            session_id: obj.session_id,
+            ts: obj.ts,
+            text: obj.text
+          });
+        }
+      } catch {
+        // ignore malformed lines
+      }
+    }
+    return entries;
+  } catch {
+    return [];
+  }
+}
+
+async function readCodexSessionIndex(): Promise<CodexSessionIndexEntry[]> {
+  const sessionIndexPath = path.join(os.homedir(), ".codex", "session_index.jsonl");
+  try {
+    const content = await fs.readFile(sessionIndexPath, "utf8");
+    const entries: CodexSessionIndexEntry[] = [];
+    for (const line of content.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      try {
+        const obj = JSON.parse(trimmed) as Partial<CodexSessionIndexEntry>;
+        if (typeof obj?.id === "string" && obj.id) {
+          entries.push({
+            id: obj.id,
+            thread_name: typeof obj.thread_name === "string" ? obj.thread_name : undefined,
+            updated_at: typeof obj.updated_at === "string" ? obj.updated_at : undefined
+          });
+        }
+      } catch {
+        // ignore malformed lines
+      }
+    }
+
+    entries.sort((a, b) => {
+      const ta = a.updated_at ? Date.parse(a.updated_at) : 0;
+      const tb = b.updated_at ? Date.parse(b.updated_at) : 0;
+      return tb - ta;
+    });
+
+    return entries;
+  } catch {
+    return [];
+  }
+}
+
+async function suggestCodexSessions(
+  query: string
+): Promise<Array<{ id: string; threadName?: string; updatedAt?: string; score: number }>> {
+  const [sessions, history] = await Promise.all([readCodexSessionIndex(), readCodexHistory()]);
+  if (!sessions.length || !history.length) return [];
+
+  const qTokens = new Set(tokenizeForMatch(query));
+  if (!qTokens.size) return [];
+
+  const sessionToName = new Map<string, CodexSessionIndexEntry>();
+  for (const s of sessions) sessionToName.set(s.id, s);
+
+  // Build a light per-session token bag from recent history lines
+  const bySession = new Map<string, { tokens: string[]; lastTs: number }>();
+  for (const h of history) {
+    const existing = bySession.get(h.session_id);
+    const tokens = tokenizeForMatch(h.text).slice(0, 120);
+    if (!existing) {
+      bySession.set(h.session_id, { tokens: [...tokens], lastTs: h.ts });
+    } else {
+      existing.tokens.push(...tokens);
+      if (h.ts > existing.lastTs) existing.lastTs = h.ts;
+      if (existing.tokens.length > 2000) {
+        existing.tokens.splice(0, existing.tokens.length - 2000);
+      }
+    }
+  }
+
+  const scored: Array<{ id: string; threadName?: string; updatedAt?: string; score: number }> = [];
+  for (const [id, doc] of bySession) {
+    const meta = sessionToName.get(id);
+    const s = scoreSession(qTokens, doc.tokens);
+    if (s <= 0) continue;
+    scored.push({
+      id,
+      threadName: meta?.thread_name,
+      updatedAt: meta?.updated_at,
+      score: s
+    });
+  }
+
+  scored.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    const ta = a.updatedAt ? Date.parse(a.updatedAt) : 0;
+    const tb = b.updatedAt ? Date.parse(b.updatedAt) : 0;
+    return tb - ta;
+  });
+
+  return scored.slice(0, 50);
+}
 
 type LaunchpadProject = {
   name: string;
@@ -2134,6 +2342,23 @@ async function getGitHubRepoUrlFromGitApi(): Promise<
     .filter((item): item is { label: string; url: string } => Boolean(item));
 }
 
+async function getGitRepoRootsFromGitApi(): Promise<{ label: string; rootUri: vscode.Uri }[]> {
+  const gitExtension =
+    vscode.extensions.getExtension<GitExtension>("vscode.git");
+  if (!gitExtension) {
+    return [];
+  }
+
+  const gitApi = gitExtension.isActive
+    ? gitExtension.exports.getAPI(1)
+    : (await gitExtension.activate()).getAPI(1);
+
+  return gitApi.repositories.map((repo) => ({
+    label: path.basename(repo.rootUri.fsPath),
+    rootUri: repo.rootUri
+  }));
+}
+
 async function getGitHubRepoUrlFromRoot(
   workspaceRoot: string
 ): Promise<string | undefined> {
@@ -2611,8 +2836,35 @@ export function activate(context: vscode.ExtensionContext) {
           uri?: vscode.Uri;
         } | null
       )?.uri;
-      const workspaceUri = vscode.workspace.workspaceFolders?.[0]?.uri;
-      const uri = activeEditorUri ?? activeTabUri ?? workspaceUri;
+      let uri = activeEditorUri ?? activeTabUri;
+
+      if (!uri) {
+        // If there's no active editor (e.g. focus is in Explorer), prefer the Git repo root(s)
+        // because workspace root can be a parent folder (like ~/Documents/GitHub).
+        const repos = await getGitRepoRootsFromGitApi();
+        if (repos.length === 1) {
+          uri = repos[0].rootUri;
+        } else if (repos.length > 1) {
+          const pick = await vscode.window.showQuickPick(
+            repos.map((r) => ({ label: r.label, description: r.rootUri.fsPath, repo: r })),
+            { placeHolder: "Reveal which repository?" }
+          );
+          uri = pick?.repo.rootUri;
+        }
+      }
+
+      if (!uri) {
+        const workspaceFolders = vscode.workspace.workspaceFolders ?? [];
+        if (workspaceFolders.length === 1) {
+          uri = workspaceFolders[0].uri;
+        } else if (workspaceFolders.length > 1) {
+          const pick = await vscode.window.showQuickPick(
+            workspaceFolders.map((f) => ({ label: f.name, description: f.uri.fsPath, folder: f })),
+            { placeHolder: "Reveal which workspace folder?" }
+          );
+          uri = pick?.folder.uri;
+        }
+      }
 
       if (!uri) {
         vscode.window.showInformationMessage(
@@ -2639,6 +2891,162 @@ export function activate(context: vscode.ExtensionContext) {
           query
         );
       }
+    }
+  );
+
+  const codexCaptureResumeCmd = vscode.commands.registerCommand(
+    "pkvsconf.codexCaptureResume",
+    async () => {
+      const clipboard = await vscode.env.clipboard.readText();
+      const command = extractCodexResumeCommand(clipboard);
+      if (!command) {
+        vscode.window.showWarningMessage(
+          'Presse-papiers invalide. Copiez quelque chose comme "codex resume xxx" puis relancez la commande.'
+        );
+        return;
+      }
+
+      const saved = await addCodexResumeEntry(context, {
+        command,
+        createdAt: Date.now()
+      });
+      await vscode.env.clipboard.writeText(saved.command);
+      vscode.window.showInformationMessage(`Saved: ${saved.command}`);
+    }
+  );
+
+  const codexSaveResumeCmd = vscode.commands.registerCommand(
+    "pkvsconf.codexSaveResume",
+    async () => {
+      const input = await vscode.window.showInputBox({
+        title: "Save Codex resume",
+        prompt: 'Collez "codex resume xxx" (ou juste le token)',
+        placeHolder: "codex resume xxx"
+      });
+      if (input === undefined) return;
+
+      const command = extractCodexResumeCommand(input);
+      if (!command) {
+        vscode.window.showWarningMessage('Entrée invalide. Attendu: "codex resume <id>" ou "<id>".');
+        return;
+      }
+
+      const label = await vscode.window.showInputBox({
+        title: "Label (optionnel)",
+        prompt: "Ex: nom du repo / objectif",
+        placeHolder: "debug-auth",
+        value: ""
+      });
+      if (label === undefined) return;
+
+      const saved = await addCodexResumeEntry(context, {
+        command,
+        label: label.trim() || undefined,
+        createdAt: Date.now()
+      });
+      await vscode.env.clipboard.writeText(saved.command);
+      vscode.window.showInformationMessage(`Saved: ${saved.command}`);
+    }
+  );
+
+  const codexPickResumeCmd = vscode.commands.registerCommand(
+    "pkvsconf.codexPickResume",
+    async () => {
+      const entries = getCodexResumeEntries(context);
+      if (!entries.length) {
+        vscode.window.showInformationMessage("Aucun resume Codex sauvegardé.");
+        return;
+      }
+
+      const pick = await vscode.window.showQuickPick(
+        entries.map((e) => {
+          const when = new Date(e.createdAt).toLocaleString();
+          return {
+            label: e.label ? e.label : e.command,
+            description: e.label ? e.command : undefined,
+            detail: when,
+            entry: e
+          };
+        }),
+        { placeHolder: "Choisir un resume Codex (copie dans le presse-papiers)" }
+      );
+      if (!pick?.entry) return;
+
+      await vscode.env.clipboard.writeText(pick.entry.command);
+      vscode.window.showInformationMessage(`Copied: ${pick.entry.command}`);
+    }
+  );
+
+  const codexPickRecentSessionCmd = vscode.commands.registerCommand(
+    "pkvsconf.codexPickRecentSession",
+    async () => {
+      const sessions = await readCodexSessionIndex();
+      if (!sessions.length) {
+        vscode.window.showInformationMessage(
+          "Aucune session Codex trouvée dans ~/.codex/session_index.jsonl."
+        );
+        return;
+      }
+
+      const pick = await vscode.window.showQuickPick(
+        sessions.slice(0, 200).map((s) => {
+          const when = s.updated_at ? new Date(s.updated_at).toLocaleString() : "";
+          const title = s.thread_name?.trim() || "(sans titre)";
+          return {
+            label: title,
+            description: when,
+            detail: s.id,
+            session: s
+          };
+        }),
+        { placeHolder: "Choisir une session Codex récente (copie `codex resume <id>`)" }
+      );
+      if (!pick?.session) return;
+
+      const cmdToCopy = `codex resume ${pick.session.id}`;
+      await vscode.env.clipboard.writeText(cmdToCopy);
+      vscode.window.showInformationMessage(`Copié: ${cmdToCopy}`);
+    }
+  );
+
+  const codexSuggestSessionCmd = vscode.commands.registerCommand(
+    "pkvsconf.codexSuggestSession",
+    async () => {
+      const wsName = vscode.workspace.workspaceFolders?.[0]
+        ? path.basename(vscode.workspace.workspaceFolders[0].uri.fsPath)
+        : "";
+      const query = await vscode.window.showInputBox({
+        title: "Codex: retrouver la bonne session",
+        prompt: "Mots-clés (repo, feature, erreur, fichier...)",
+        value: wsName,
+        placeHolder: "Ex: pkvsconf seeds resume session"
+      });
+      if (query === undefined) return;
+
+      const results = await suggestCodexSessions(query);
+      if (!results.length) {
+        vscode.window.showInformationMessage("Aucune session trouvée via le transcript Codex.");
+        return;
+      }
+
+      const pick = await vscode.window.showQuickPick(
+        results.map((r) => {
+          const when = r.updatedAt ? new Date(r.updatedAt).toLocaleString() : "";
+          const title = r.threadName?.trim() || "(sans titre)";
+          return {
+            label: `${title}`,
+            description: `score ${r.score}${when ? ` • ${when}` : ""}`,
+            detail: r.id,
+            id: r.id
+          };
+        }),
+        { placeHolder: "Suggestion de session (copie `codex resume <id>`)" }
+      );
+      if (!pick?.id) return;
+
+      const cmdToCopy = `codex resume ${pick.id}`;
+      await vscode.env.clipboard.writeText(cmdToCopy);
+      vscode.window.showInformationMessage(`Copié: ${cmdToCopy}`);
     }
   );
 
@@ -2943,6 +3351,7 @@ export function activate(context: vscode.ExtensionContext) {
       const username = process.env.USER || process.env.USERNAME || "clm";
       const sourcePath = `/Users/${username}/Documents/GitHub/-agent`;
       const targetPath = path.join(workspaceRoot, ".agent");
+      const linkScriptPath = path.join(targetPath, "link-agent-files.sh");
 
       const gitignorePath = path.join(workspaceRoot, ".gitignore");
       const gitignoreEntry = ".agent";
@@ -2970,6 +3379,7 @@ export function activate(context: vscode.ExtensionContext) {
 
       let symlinkCreated = false;
       let symlinkUpdated = false;
+      let agentFilesLinked = false;
 
       // Vérifier si le symlink existe déjà et s'il pointe vers la bonne cible
       try {
@@ -3015,12 +3425,37 @@ export function activate(context: vscode.ExtensionContext) {
         return;
       }
 
+      // Run shared linker so AGENT.md / CLAUDE.md / GEMINI.md... are refreshed in project root.
+      try {
+        await fs.access(linkScriptPath);
+        await new Promise<void>((resolve, reject) => {
+          cp.execFile("/bin/bash", [linkScriptPath], { cwd: workspaceRoot }, (error) => {
+            if (error) {
+              reject(error);
+              return;
+            }
+            resolve();
+          });
+        });
+        agentFilesLinked = true;
+      } catch (error) {
+        vscode.window.showWarningMessage(
+          `Symlink '.agent' OK, mais exécution de link-agent-files.sh impossible: ${error}`
+        );
+      }
+
       vscode.window.showInformationMessage(
         symlinkCreated
-          ? "Lien symbolique '.agent' créé vers '-agent' et .gitignore mis à jour."
+          ? agentFilesLinked
+            ? "Lien symbolique '.agent' créé, .gitignore mis à jour, et fichiers AGENT/LLM linkés."
+            : "Lien symbolique '.agent' créé vers '-agent' et .gitignore mis à jour."
           : symlinkUpdated
-            ? "Lien symbolique '.agent' mis à jour vers '-agent' et .gitignore mis à jour."
-            : "Lien symbolique '.agent' déjà présent vers '-agent'. .gitignore mis à jour."
+            ? agentFilesLinked
+              ? "Lien symbolique '.agent' mis à jour, .gitignore mis à jour, et fichiers AGENT/LLM linkés."
+              : "Lien symbolique '.agent' mis à jour vers '-agent' et .gitignore mis à jour."
+            : agentFilesLinked
+              ? "Lien symbolique '.agent' déjà présent. .gitignore mis à jour et fichiers AGENT/LLM relinkés."
+              : "Lien symbolique '.agent' déjà présent vers '-agent'. .gitignore mis à jour."
       );
     }
   );
@@ -3038,6 +3473,11 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     manageCategoryCmd,
     searchExtensionsCmd,
+    codexCaptureResumeCmd,
+    codexSaveResumeCmd,
+    codexPickResumeCmd,
+    codexPickRecentSessionCmd,
+    codexSuggestSessionCmd,
     regenerateTitlebarColorCmd,
     previewActivePageCmd,
     showSecretsCmd,

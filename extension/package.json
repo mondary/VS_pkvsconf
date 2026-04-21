@@ -21,6 +21,11 @@
     "onCommand:revealInFinderButton.refreshRootSize",
     "onCommand:revealInFinderButton.openGitHubRepo",
     "onCommand:pkvsconf.addTagToExtension",
+    "onCommand:pkvsconf.codexCaptureResume",
+    "onCommand:pkvsconf.codexSaveResume",
+    "onCommand:pkvsconf.codexPickResume",
+    "onCommand:pkvsconf.codexPickRecentSession",
+    "onCommand:pkvsconf.codexSuggestSession",
     "onCommand:pkvsconf.createTagForExtension",
     "onCommand:pkvsconf.removeTagFromExtension",
     "onCommand:pkvsconf.regenerateWorkspaceTitlebarColor",
@@ -82,6 +87,31 @@
       {
         "command": "pkvsconf.searchExtensions",
         "title": "Rechercher des extensions",
+        "icon": "$(search)"
+      },
+      {
+        "command": "pkvsconf.codexCaptureResume",
+        "title": "Codex: Capturer resume depuis le presse-papiers",
+        "icon": "$(copy)"
+      },
+      {
+        "command": "pkvsconf.codexSaveResume",
+        "title": "Codex: Sauver un resume (manuel)",
+        "icon": "$(save)"
+      },
+      {
+        "command": "pkvsconf.codexPickResume",
+        "title": "Codex: Reprendre (copier) un resume sauvegardé",
+        "icon": "$(history)"
+      },
+      {
+        "command": "pkvsconf.codexPickRecentSession",
+        "title": "Codex: Reprendre une session récente (auto)",
+        "icon": "$(history)"
+      },
+      {
+        "command": "pkvsconf.codexSuggestSession",
+        "title": "Codex: Suggérer la bonne session (transcript)",
         "icon": "$(search)"
       },
       {
@@ -189,6 +219,18 @@
         },
         {
           "command": "pkvsconf.addTagToExtension"
+        },
+        {
+          "command": "pkvsconf.codexCaptureResume"
+        },
+        {
+          "command": "pkvsconf.codexPickResume"
+        },
+        {
+          "command": "pkvsconf.codexPickRecentSession"
+        },
+        {
+          "command": "pkvsconf.codexSuggestSession"
         },
         {
           "command": "pkvsconf.regenerateWorkspaceTitlebarColor"
