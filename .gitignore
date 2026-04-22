@@ -6,7 +6,7 @@ Icon
 .claude/
 .agent
 .agent/
-# Root-level agent/LLM instruction links
+# Root-level agent/LLM instruction links (generated locally)
 /AGENT.md
 /CLAUDE.md
 /CODEX.md
