@@ -227,6 +227,31 @@ type LaunchpadProject = {
   path: string;
 };
 
+type LaunchpadQuickPickItem = vscode.QuickPickItem & {
+  project: LaunchpadProject;
+};
+
+type LaunchpadActionQuickPickItem = vscode.QuickPickItem & {
+  action: "addCurrent" | "addFolder";
+};
+
+type LaunchpadSeparatorItem = vscode.QuickPickItem & {
+  kind: vscode.QuickPickItemKind.Separator;
+};
+
+type LaunchpadCombinedQuickPickItem =
+  | LaunchpadQuickPickItem
+  | LaunchpadActionQuickPickItem
+  | LaunchpadSeparatorItem;
+
+function isProjectInLaunchpad(
+  projects: LaunchpadProject[],
+  projectPath: string
+): boolean {
+  const normalized = path.normalize(projectPath);
+  return projects.some((p) => path.normalize(p.path) === normalized);
+}
+
 function getLaunchpadProjects(): LaunchpadProject[] {
   const cfg = vscode.workspace.getConfiguration("pkvsconf").get<LaunchpadProject[]>("launchpad.projects");
   if (!cfg || !Array.isArray(cfg)) {
@@ -301,17 +326,63 @@ async function addCurrentWorkspaceToLaunchpad() {
 }
 
 async function openLaunchpadQuickPick() {
-  const projects = getLaunchpadProjects();
-  if (!projects.length) {
-    vscode.window.showWarningMessage("Aucun projet dans le Launchpad. Ajoutez-en un via la commande dédiée.");
-    return;
-  }
-  const pick = await vscode.window.showQuickPick(
-    projects.map((p) => ({ label: p.name || path.basename(p.path), description: p.path, project: p })),
-    { placeHolder: "Ouvrir un projet du Launchpad" }
-  );
-  if (pick?.project) {
-    await openProjectInNewWindow(pick.project.path);
+  while (true) {
+    const projects = getLaunchpadProjects();
+    const projectItems = await buildLaunchpadQuickPickItems(projects);
+    const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+
+    const actionItems: LaunchpadActionQuickPickItem[] = [
+      {
+        label: "$(folder-add) Ajouter un dossier au Launchpad",
+        description: "",
+        action: "addFolder"
+      }
+    ];
+
+    if (workspacePath) {
+      const alreadyInLaunchpad = isProjectInLaunchpad(projects, workspacePath);
+      actionItems.unshift({
+        label: "$(add) Ajouter le projet courant au Launchpad",
+        description: alreadyInLaunchpad
+          ? `${workspacePath} (déjà présent)`
+          : workspacePath,
+        action: "addCurrent"
+      });
+    }
+
+    const separator: LaunchpadSeparatorItem = {
+      label: "Actions",
+      kind: vscode.QuickPickItemKind.Separator
+    };
+
+    const items: LaunchpadCombinedQuickPickItem[] = [
+      ...projectItems,
+      ...(actionItems.length
+        ? [separator, ...actionItems]
+        : [])
+    ];
+
+    const pick = await vscode.window.showQuickPick(items, {
+      placeHolder: "Ouvrir un projet du Launchpad ou en ajouter un"
+    });
+
+    if (!pick) {
+      return;
+    }
+
+    if ("action" in pick) {
+      if (pick.action === "addCurrent") {
+        await addCurrentWorkspaceToLaunchpad();
+      } else {
+        await addFolderToLaunchpad();
+      }
+      continue;
+    }
+
+    if ("project" in pick) {
+      await openProjectInNewWindow(pick.project.path);
+      return;
+    }
   }
 }
 
@@ -330,11 +401,45 @@ async function revealProjectInFinder(project?: LaunchpadProject) {
 
 async function pickProjectForAction(placeHolder: string): Promise<LaunchpadProject | undefined> {
   const projects = getLaunchpadProjects();
-  const pick = await vscode.window.showQuickPick(
-    projects.map((p) => ({ label: p.name || path.basename(p.path), description: p.path, project: p })),
-    { placeHolder }
-  );
+  const items = await buildLaunchpadQuickPickItems(projects);
+  const pick = await vscode.window.showQuickPick(items, { placeHolder });
   return pick?.project;
+}
+
+async function getProjectIconFileUri(project: LaunchpadProject): Promise<vscode.Uri | undefined> {
+  const candidates = [
+    "icon.png",
+    "icon.jpg",
+    "icon.jpeg",
+    "Icon.png",
+    "Icon.jpg",
+    "Icon.jpeg"
+  ];
+
+  for (const filename of candidates) {
+    const candidatePath = path.join(project.path, filename);
+    try {
+      await fs.access(candidatePath);
+      return vscode.Uri.file(candidatePath);
+    } catch {
+      // keep searching
+    }
+  }
+
+  return undefined;
+}
+
+async function buildLaunchpadQuickPickItems(
+  projects: LaunchpadProject[]
+): Promise<LaunchpadQuickPickItem[]> {
+  return Promise.all(
+    projects.map(async (project) => ({
+      label: project.name || path.basename(project.path),
+      description: project.path,
+      project,
+      iconPath: await getProjectIconFileUri(project)
+    }))
+  );
 }
 
 function toDataUriFromSvg(title: string, bg: string): string {
@@ -730,9 +835,12 @@ async function buildProjectNotesHtml(webview: vscode.Webview, initialContent: st
 }
 
 class LaunchpadWebviewProvider implements vscode.WebviewViewProvider {
+  private currentView: vscode.WebviewView | undefined;
+
   constructor(private readonly context: vscode.ExtensionContext) {}
 
   async resolveWebviewView(webviewView: vscode.WebviewView): Promise<void> {
+    this.currentView = webviewView;
     webviewView.webview.options = {
       enableScripts: true
     };
@@ -758,6 +866,13 @@ class LaunchpadWebviewProvider implements vscode.WebviewViewProvider {
   async render(view: vscode.WebviewView): Promise<void> {
     const projects = getLaunchpadProjects();
     view.webview.html = await buildLaunchpadHtml(view.webview, projects);
+  }
+
+  async refreshCurrentView(): Promise<void> {
+    if (!this.currentView) {
+      return;
+    }
+    await this.render(this.currentView);
   }
 }
 
@@ -2731,13 +2846,7 @@ export function activate(context: vscode.ExtensionContext) {
   );
 
   async function refreshLaunchpadViews() {
-    const view2 = await vscode.commands.executeCommand<vscode.WebviewView>(
-      "workbench.views.getView",
-      LAUNCHPAD_EXPLORER_VIEW_ID
-    );
-    if (view2) {
-      await launchpadProvider.render(view2);
-    }
+    await launchpadProvider.refreshCurrentView();
   }
 
   const launchpadOpenCmd = vscode.commands.registerCommand(
@@ -3454,7 +3563,7 @@ export function activate(context: vscode.ExtensionContext) {
         return;
       }
 
-      // Run shared linker so AGENT.md / CLAUDE.md / GEMINI.md... are refreshed in project root.
+      // Run shared linker so AGENTS.md is refreshed in project root.
       try {
         const scriptCandidates = [
           workspaceLinkScriptPath,

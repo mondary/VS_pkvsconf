@@ -2,7 +2,7 @@
   "name": "vs-pkvsconf",
   "displayName": "VS_pkvsconf",
   "description": "Adds a toolbar button in Explorer to reveal the active file in Finder.",
-  "version": "2.2.8",
+  "version": "2.2.12",
   "publisher": "Cmondary",
   "icon": "icon.png",
   "license": "MIT",
@@ -58,7 +58,10 @@
         "pkvsconf.launchpad.viewMode": {
           "type": "string",
           "default": "grid",
-          "enum": ["grid", "mini"],
+          "enum": [
+            "grid",
+            "mini"
+          ],
           "description": "Mode d'affichage du Launchpad: 'grid' (tuiles) ou 'mini' (icônes 32x32 en ligne)."
         }
       }
@@ -185,33 +188,33 @@
         }
       }
     ],
-  "views": {
-    "explorer": [
-      {
-        "id": "projectIconView",
-        "name": "Project Icon",
-        "type": "webview",
-        "collapsed": false
-      },
-      {
-        "id": "extensionTagsView",
-        "name": "PK Extensions",
-        "type": "webview"
-      },
-      {
-        "id": "projectNotesView",
-        "name": "Notes Projet",
-        "type": "webview",
-        "collapsed": false
-      },
-      {
-        "id": "launchpadExplorerView",
-        "name": "Launchpad Projets",
-        "type": "webview",
-        "collapsed": false
-      }
-    ]
-  },
+    "views": {
+      "explorer": [
+        {
+          "id": "projectIconView",
+          "name": "Project Icon",
+          "type": "webview",
+          "collapsed": false
+        },
+        {
+          "id": "extensionTagsView",
+          "name": "PK Extensions",
+          "type": "webview"
+        },
+        {
+          "id": "projectNotesView",
+          "name": "Notes Projet",
+          "type": "webview",
+          "collapsed": false
+        },
+        {
+          "id": "launchpadExplorerView",
+          "name": "Launchpad Projets",
+          "type": "webview",
+          "collapsed": false
+        }
+      ]
+    },
     "menus": {
       "commandPalette": [
         {
