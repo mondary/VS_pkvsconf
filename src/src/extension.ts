@@ -14,6 +14,7 @@ const LAUNCHPAD_EXPLORER_VIEW_ID = "launchpadExplorerView";
 const PROJECT_NOTES_VIEW_ID = "projectNotesView";
 const EXTENSION_TAGS_STORAGE_KEY = "extensionTags";
 const WORKSPACE_TITLEBAR_COLOR_KEY = "workspaceTitlebarColor";
+const WORKSPACE_TITLEBAR_COLOR_HISTORY_KEY = "workspaceTitlebarColorHistory";
 const CODEX_RESUME_STORAGE_KEY = "codexResumeCommands";
 
 type CodexResumeEntry = {
@@ -1593,43 +1594,60 @@ function getReadableTextColor(hex: string): string {
   return relativeLuminance(rgb) > 0.5 ? "#1F1F1F" : "#FFFFFF";
 }
 
-function randomHslColor(): string {
-  const hue = Math.floor(Math.random() * 360);
-  const saturation = 68;
-  const lightness = 44;
-  const c = (1 - Math.abs(2 * lightness / 100 - 1)) * (saturation / 100);
-  const x = c * (1 - Math.abs(((hue / 60) % 2) - 1));
-  const m = lightness / 100 - c / 2;
+const TITLEBAR_COLOR_PALETTE: string[] = [
+  "#D62828", // red
+  "#F77F00", // orange
+  "#FCBF49", // amber
+  "#F4A261", // peach
+  "#E9C46A", // sand
+  "#2A9D8F", // teal
+  "#264653", // deep teal
+  "#1D3557", // navy
+  "#457B9D", // blue
+  "#1D4ED8", // cobalt
+  "#4CC9F0", // sky
+  "#06B6D4", // cyan
+  "#10B981", // green
+  "#22C55E", // bright green
+  "#65A30D", // olive
+  "#84CC16", // lime
+  "#6D597A", // purple
+  "#7C3AED", // violet
+  "#C026D3", // magenta
+  "#E11D48", // rose
+  "#EF4444", // coral red
+  "#F97316", // vivid orange
+  "#F59E0B", // gold
+  "#14B8A6", // teal bright
+  "#0EA5E9", // azure
+  "#2563EB", // blue bright
+  "#0F766E", // deep teal
+  "#7F5539", // brown
+  "#374151", // slate
+  "#111827"  // near-black
+];
 
-  let r = 0;
-  let g = 0;
-  let b = 0;
+function pickRandom<T>(items: T[]): T {
+  return items[Math.floor(Math.random() * items.length)];
+}
 
-  if (hue < 60) {
-    r = c;
-    g = x;
-  } else if (hue < 120) {
-    r = x;
-    g = c;
-  } else if (hue < 180) {
-    g = c;
-    b = x;
-  } else if (hue < 240) {
-    g = x;
-    b = c;
-  } else if (hue < 300) {
-    r = x;
-    b = c;
-  } else {
-    r = c;
-    b = x;
+function getTitlebarColorHistory(context: vscode.ExtensionContext): string[] {
+  const raw = context.workspaceState.get<unknown>(WORKSPACE_TITLEBAR_COLOR_HISTORY_KEY);
+  if (!Array.isArray(raw)) {
+    return [];
   }
+  return raw.filter((v) => typeof v === "string") as string[];
+}
 
-  return rgbToHex(
-    (r + m) * 255,
-    (g + m) * 255,
-    (b + m) * 255
-  );
+async function pickNextTitlebarColor(context: vscode.ExtensionContext): Promise<string> {
+  const history = getTitlebarColorHistory(context);
+  const recent = new Set(history.slice(0, 10).map((c) => c.toLowerCase()));
+  const candidates = TITLEBAR_COLOR_PALETTE.filter((c) => !recent.has(c.toLowerCase()));
+  const next = pickRandom(candidates.length ? candidates : TITLEBAR_COLOR_PALETTE);
+
+  const nextHistory = [next, ...history.filter((c) => c.toLowerCase() !== next.toLowerCase())].slice(0, 25);
+  await context.workspaceState.update(WORKSPACE_TITLEBAR_COLOR_HISTORY_KEY, nextHistory);
+  return next;
 }
 
 async function getDirectorySizeBytes(
@@ -2399,7 +2417,7 @@ async function ensureWorkspaceTitlebarColor(
 
   let color = context.workspaceState.get<string>(WORKSPACE_TITLEBAR_COLOR_KEY);
   if (!color || forceNew) {
-    color = randomHslColor();
+    color = await pickNextTitlebarColor(context);
     await context.workspaceState.update(WORKSPACE_TITLEBAR_COLOR_KEY, color);
   }
 
@@ -3484,6 +3502,7 @@ export function activate(context: vscode.ExtensionContext) {
       const gitignoreEntries = [
         ".agent",
         "/AGENT.md",
+        "/AGENTS.md",
         "/CLAUDE.md",
         "/CODEX.md",
         "/GEMINI.md",

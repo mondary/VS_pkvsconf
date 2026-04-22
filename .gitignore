@@ -8,6 +8,7 @@ Icon
 .agent/
 # Root-level agent/LLM instruction links (generated locally)
 /AGENT.md
+/AGENTS.md
 /CLAUDE.md
 /CODEX.md
 /GEMINI.md
