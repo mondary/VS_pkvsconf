@@ -1,10 +1,18 @@
 node_modules/
-extension/node_modules/
+src/node_modules/
 .DS_Store
 openspec/
 Icon
 .claude/
+.agent
 .agent/
+# Root-level agent/LLM instruction links
+/AGENT.md
+/CLAUDE.md
+/CODEX.md
+/GEMINI.md
+/GLM.md
+/OPENCODE.md
 .vscode/
 skill_*.md
 release/

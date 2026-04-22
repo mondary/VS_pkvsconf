@@ -2290,7 +2290,26 @@ function activate(context) {
             vscode.window.showInformationMessage("No active file or workspace folder to reveal.");
             return;
         }
-        await vscode.commands.executeCommand("revealFileInOS", uri);
+        if (uri.scheme !== "file") {
+            vscode.window.showWarningMessage("Reveal in Finder: cible non-fichier.");
+            return;
+        }
+        try {
+            const stat = await fs.stat(uri.fsPath);
+            await new Promise((resolve, reject) => {
+                const args = stat.isDirectory() ? [uri.fsPath] : ["-R", uri.fsPath];
+                cp.execFile("/usr/bin/open", args, (error) => {
+                    if (error) {
+                        reject(error);
+                        return;
+                    }
+                    resolve();
+                });
+            });
+        }
+        catch (error) {
+            vscode.window.showErrorMessage(`Reveal in Finder impossible: ${error}`);
+        }
     });
     const searchExtensionsCmd = vscode.commands.registerCommand("pkvsconf.searchExtensions", async () => {
         const query = await vscode.window.showInputBox({
@@ -2636,7 +2655,8 @@ function activate(context) {
         const username = process.env.USER || process.env.USERNAME || "clm";
         const sourcePath = `/Users/${username}/Documents/GitHub/-agent`;
         const targetPath = path.join(workspaceRoot, ".agent");
-        const linkScriptPath = path.join(targetPath, "link-agent-files.sh");
+        const workspaceLinkScriptPath = path.join(workspaceRoot, ".agent", "agents", "link-agent-files.sh");
+        const sharedLinkScriptPath = path.join(sourcePath, "agents", "link-agent-files.sh");
         const gitignorePath = path.join(workspaceRoot, ".gitignore");
         const gitignoreEntry = ".agent";
         const ensureGitignoreHasSkills = async () => {
@@ -2662,19 +2682,23 @@ function activate(context) {
         };
         let symlinkCreated = false;
         let symlinkUpdated = false;
+        let symlinkSkipped = false;
         let agentFilesLinked = false;
+        let linkedWithScriptPath;
         // Vérifier si le symlink existe déjà et s'il pointe vers la bonne cible
         try {
             const targetStats = await fs.lstat(targetPath);
             if (!targetStats.isSymbolicLink()) {
-                vscode.window.showErrorMessage("Un fichier ou dossier '.agent' existe déjà et n'est pas un lien symbolique.");
-                return;
+                // Keep existing local .agent folder and still try running linker script from workspace.
+                symlinkSkipped = true;
             }
-            const existingLinkTarget = await fs.readlink(targetPath);
-            if (existingLinkTarget !== sourcePath) {
-                await fs.unlink(targetPath);
-                await fs.symlink(sourcePath, targetPath, "dir");
-                symlinkUpdated = true;
+            else {
+                const existingLinkTarget = await fs.readlink(targetPath);
+                if (existingLinkTarget !== sourcePath) {
+                    await fs.unlink(targetPath);
+                    await fs.symlink(sourcePath, targetPath, "dir");
+                    symlinkUpdated = true;
+                }
             }
         }
         catch (error) {
@@ -2701,32 +2725,56 @@ function activate(context) {
         }
         // Run shared linker so AGENT.md / CLAUDE.md / GEMINI.md... are refreshed in project root.
         try {
-            await fs.access(linkScriptPath);
-            await new Promise((resolve, reject) => {
-                cp.execFile("/bin/bash", [linkScriptPath], { cwd: workspaceRoot }, (error) => {
-                    if (error) {
-                        reject(error);
-                        return;
-                    }
-                    resolve();
-                });
-            });
+            const scriptCandidates = [
+                workspaceLinkScriptPath,
+                sharedLinkScriptPath
+            ];
+            let scriptExecuted = false;
+            let lastScriptError;
+            for (const scriptPath of scriptCandidates) {
+                try {
+                    await fs.access(scriptPath);
+                    await new Promise((resolve, reject) => {
+                        cp.execFile("/bin/bash", [scriptPath], { cwd: workspaceRoot }, (error) => {
+                            if (error) {
+                                reject(error);
+                                return;
+                            }
+                            resolve();
+                        });
+                    });
+                    linkedWithScriptPath = scriptPath;
+                    scriptExecuted = true;
+                    break;
+                }
+                catch (error) {
+                    lastScriptError = error;
+                }
+            }
+            if (!scriptExecuted) {
+                throw lastScriptError ?? new Error("Aucun script disponible.");
+            }
             agentFilesLinked = true;
         }
         catch (error) {
-            vscode.window.showWarningMessage(`Symlink '.agent' OK, mais exécution de link-agent-files.sh impossible: ${error}`);
+            vscode.window.showWarningMessage(`Exécution de .agent/agents/link-agent-files.sh impossible: ${error}`);
         }
-        vscode.window.showInformationMessage(symlinkCreated
-            ? agentFilesLinked
-                ? "Lien symbolique '.agent' créé, .gitignore mis à jour, et fichiers AGENT/LLM linkés."
-                : "Lien symbolique '.agent' créé vers '-agent' et .gitignore mis à jour."
+        const symlinkStatus = symlinkCreated
+            ? "Lien symbolique '.agent' créé"
             : symlinkUpdated
-                ? agentFilesLinked
-                    ? "Lien symbolique '.agent' mis à jour, .gitignore mis à jour, et fichiers AGENT/LLM linkés."
-                    : "Lien symbolique '.agent' mis à jour vers '-agent' et .gitignore mis à jour."
-                : agentFilesLinked
-                    ? "Lien symbolique '.agent' déjà présent. .gitignore mis à jour et fichiers AGENT/LLM relinkés."
-                    : "Lien symbolique '.agent' déjà présent vers '-agent'. .gitignore mis à jour.");
+                ? "Lien symbolique '.agent' mis à jour"
+                : symlinkSkipped
+                    ? "Dossier '.agent' local conservé (pas de symlink)"
+                    : "Lien symbolique '.agent' déjà présent";
+        if (agentFilesLinked) {
+            const scriptInfo = linkedWithScriptPath
+                ? `Script exécuté: ${linkedWithScriptPath}`
+                : "Script exécuté";
+            vscode.window.showInformationMessage(`${symlinkStatus}, .gitignore mis à jour, et fichiers AGENT/LLM linkés. ${scriptInfo}`);
+        }
+        else {
+            vscode.window.showInformationMessage(`${symlinkStatus}, .gitignore mis à jour.`);
+        }
     });
     context.subscriptions.push(cmd, refreshCmd, openRepoCmd, rootSizeItem, previewItem, titlebarColorItem, secretsItem, launchpadItem);
     context.subscriptions.push(manageCategoryCmd, searchExtensionsCmd, codexCaptureResumeCmd, codexSaveResumeCmd, codexPickResumeCmd, codexPickRecentSessionCmd, codexSuggestSessionCmd, regenerateTitlebarColorCmd, previewActivePageCmd, showSecretsCmd, rescanSecretsCmd, commitWithSecretCheckCmd, createSkillsSymlinkCmd, skillsSymlinkItem, launchpadOpenCmd, launchpadAddCmd, launchpadAddFolderCmd, launchpadToggleViewModeCmd, launchpadRevealCmd);

@@ -56,7 +56,7 @@ Aucun reglage dedie. Les couleurs de la status bar utilisent :
 ## 📦 Build & Package
 
 ```bash
-cd extension
+cd src
 npm run release
 ```
 
@@ -93,11 +93,11 @@ npm run release
 
 ### 1.39
 
-- 📝 Alignement du `extension/README.md` sur le meme contenu que le README GitHub.
+- 📝 Alignement du `src/README.md` sur le meme contenu que le README GitHub.
 
 ### 1.38
 
-- 📝 Ajout d'un `extension/README.md` pour alimenter correctement l'overview du Visual Studio Marketplace.
+- 📝 Ajout d'un `src/README.md` pour alimenter correctement l'overview du Visual Studio Marketplace.
 - 🔗 Ajout du lien vers la page publisher du store dans le README.
 
 ### 1.37

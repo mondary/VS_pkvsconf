@@ -24,7 +24,7 @@ Use the current layout as the preferred project structure:
 ```
 .
 ├─ .agent/      # Local agent resources and reusable skills
-├─ extension/   # VS Code extension source, build output, and scripts
+├─ src/   # VS Code extension source, build output, and scripts
 ├─ openspec/    # OpenSpec specs and changes
 ├─ release/     # Generated .vsix packages
 ├─ README.md
