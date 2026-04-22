@@ -2735,25 +2735,35 @@ function activate(context) {
         const username = process.env.USER || process.env.USERNAME || "clm";
         const sourcePath = `/Users/${username}/Documents/GitHub/-agent`;
         const targetPath = path.join(workspaceRoot, ".agent");
-        const workspaceLinkScriptPath = path.join(workspaceRoot, ".agent", "agents", "link-agent-files.sh");
-        const sharedLinkScriptPath = path.join(sourcePath, "agents", "link-agent-files.sh");
         const gitignorePath = path.join(workspaceRoot, ".gitignore");
-        const gitignoreEntry = ".agent";
+        const gitignoreEntries = [
+            ".agent",
+            "/AGENT.md",
+            "/CLAUDE.md",
+            "/CODEX.md",
+            "/GEMINI.md",
+            "/GLM.md",
+            "/OPENCODE.md"
+        ];
         const ensureGitignoreHasSkills = async () => {
             try {
                 const existing = await fs.readFile(gitignorePath, "utf8");
-                const hasEntry = existing
-                    .split(/\r?\n/)
-                    .some((line) => line.trim() === gitignoreEntry || line.trim() === `${gitignoreEntry}/`);
-                if (!hasEntry) {
+                const existingLines = existing.split(/\r?\n/).map((l) => l.trim());
+                const missing = gitignoreEntries.filter((e) => {
+                    if (e === ".agent") {
+                        return !existingLines.includes(".agent") && !existingLines.includes(".agent/");
+                    }
+                    return !existingLines.includes(e);
+                });
+                if (missing.length) {
                     const needsNewline = existing.length > 0 && !existing.endsWith("\n");
-                    const updated = `${existing}${needsNewline ? "\n" : ""}${gitignoreEntry}\n`;
+                    const updated = `${existing}${needsNewline ? "\n" : ""}${missing.join("\n")}\n`;
                     await fs.writeFile(gitignorePath, updated, "utf8");
                 }
             }
             catch (error) {
                 if (error.code === "ENOENT") {
-                    await fs.writeFile(gitignorePath, `${gitignoreEntry}\n`, "utf8");
+                    await fs.writeFile(gitignorePath, `${gitignoreEntries.join("\n")}\n`, "utf8");
                 }
                 else {
                     throw error;
@@ -2764,7 +2774,6 @@ function activate(context) {
         let symlinkUpdated = false;
         let symlinkSkipped = false;
         let agentFilesLinked = false;
-        let linkedWithScriptPath;
         // Vérifier si le symlink existe déjà et s'il pointe vers la bonne cible
         try {
             const targetStats = await fs.lstat(targetPath);
@@ -2803,41 +2812,43 @@ function activate(context) {
             vscode.window.showErrorMessage(`Erreur lors de la mise à jour du .gitignore: ${error}`);
             return;
         }
-        // Run shared linker so AGENTS.md is refreshed in project root.
+        // Link root-level agent instruction files without touching AGENTS.md (tracked in repo).
         try {
-            const scriptCandidates = [
-                workspaceLinkScriptPath,
-                sharedLinkScriptPath
-            ];
-            let scriptExecuted = false;
-            let lastScriptError;
-            for (const scriptPath of scriptCandidates) {
+            const filesToLink = ["AGENT.md", "CLAUDE.md", "CODEX.md", "GEMINI.md", "GLM.md", "OPENCODE.md"];
+            for (const filename of filesToLink) {
+                const src = path.join(workspaceRoot, ".agent", "agents", filename);
+                const dst = path.join(workspaceRoot, filename);
                 try {
-                    await fs.access(scriptPath);
-                    await new Promise((resolve, reject) => {
-                        cp.execFile("/bin/bash", [scriptPath], { cwd: workspaceRoot }, (error) => {
-                            if (error) {
-                                reject(error);
-                                return;
-                            }
-                            resolve();
-                        });
-                    });
-                    linkedWithScriptPath = scriptPath;
-                    scriptExecuted = true;
-                    break;
+                    await fs.access(src);
+                }
+                catch {
+                    continue;
+                }
+                try {
+                    const st = await fs.lstat(dst);
+                    if (st.isSymbolicLink()) {
+                        const currentTarget = await fs.readlink(dst);
+                        if (currentTarget === `.agent/agents/${filename}`) {
+                            continue;
+                        }
+                        await fs.unlink(dst);
+                    }
+                    else {
+                        // Don't overwrite real files (including AGENTS.md).
+                        continue;
+                    }
                 }
                 catch (error) {
-                    lastScriptError = error;
+                    if (error.code !== "ENOENT") {
+                        continue;
+                    }
                 }
-            }
-            if (!scriptExecuted) {
-                throw lastScriptError ?? new Error("Aucun script disponible.");
+                await fs.symlink(`.agent/agents/${filename}`, dst);
             }
             agentFilesLinked = true;
         }
         catch (error) {
-            vscode.window.showWarningMessage(`Exécution de .agent/agents/link-agent-files.sh impossible: ${error}`);
+            vscode.window.showWarningMessage(`Link des fichiers agent en racine impossible: ${error}`);
         }
         const symlinkStatus = symlinkCreated
             ? "Lien symbolique '.agent' créé"
@@ -2847,10 +2858,7 @@ function activate(context) {
                     ? "Dossier '.agent' local conservé (pas de symlink)"
                     : "Lien symbolique '.agent' déjà présent";
         if (agentFilesLinked) {
-            const scriptInfo = linkedWithScriptPath
-                ? `Script exécuté: ${linkedWithScriptPath}`
-                : "Script exécuté";
-            vscode.window.showInformationMessage(`${symlinkStatus}, .gitignore mis à jour, et fichiers AGENT/LLM linkés. ${scriptInfo}`);
+            vscode.window.showInformationMessage(`${symlinkStatus}, .gitignore mis à jour, et fichiers AGENT/LLM linkés.`);
         }
         else {
             vscode.window.showInformationMessage(`${symlinkStatus}, .gitignore mis à jour.`);
