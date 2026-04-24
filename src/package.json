@@ -2,7 +2,7 @@
   "name": "vs-pkvsconf",
   "displayName": "VS_pkvsconf",
   "description": "Adds a toolbar button in Explorer to reveal the active file in Finder.",
-  "version": "2.2.13",
+  "version": "2.2.16",
   "publisher": "Cmondary",
   "icon": "icon.png",
   "license": "MIT",
@@ -39,10 +39,14 @@
     "onCommand:pkvsconf.launchpadAddFolder",
     "onCommand:pkvsconf.launchpadRevealInFinder",
     "onCommand:pkvsconf.launchpadToggleViewMode",
+    "onCommand:pkvsconf.agentHistoryAddFromClipboard",
+    "onCommand:pkvsconf.agentHistoryRun",
+    "onCommand:pkvsconf.agentHistoryClear",
     "onView:projectNotesView",
     "onView:projectIconView",
     "onView:extensionTagsView",
     "onView:launchpadExplorerView",
+    "onView:agentHistoryView",
     "onStartupFinished"
   ],
   "main": "./dist/extension.js",
@@ -166,6 +170,21 @@
         "command": "pkvsconf.launchpadToggleViewMode",
         "title": "Launchpad: Basculer le mode d'affichage",
         "icon": "$(layout)"
+      },
+      {
+        "command": "pkvsconf.agentHistoryAddFromClipboard",
+        "title": "Agent History: Ajouter depuis le presse-papiers",
+        "icon": "$(add)"
+      },
+      {
+        "command": "pkvsconf.agentHistoryRun",
+        "title": "Agent History: Lancer (depuis l'historique)",
+        "icon": "$(play)"
+      },
+      {
+        "command": "pkvsconf.agentHistoryClear",
+        "title": "Agent History: Vider l'historique",
+        "icon": "$(trash)"
       }
     ],
     "colors": [
@@ -191,10 +210,8 @@
     "views": {
       "explorer": [
         {
-          "id": "projectIconView",
-          "name": "Project Icon",
-          "type": "webview",
-          "collapsed": false
+          "id": "agentHistoryView",
+          "name": "Agent History"
         },
         {
           "id": "extensionTagsView",
@@ -212,6 +229,13 @@
           "name": "Launchpad Projets",
           "type": "webview",
           "collapsed": false
+        },
+        {
+          "id": "projectIconView",
+          "name": "Project Icon",
+          "type": "webview",
+          "collapsed": false,
+          "visibility": "visible"
         }
       ]
     },
@@ -333,6 +357,7 @@
   "devDependencies": {
     "@types/node": "^20.14.10",
     "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.9.1",
     "typescript": "^5.5.4"
   }
 }

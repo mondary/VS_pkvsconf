@@ -16,6 +16,109 @@ const EXTENSION_TAGS_STORAGE_KEY = "extensionTags";
 const WORKSPACE_TITLEBAR_COLOR_KEY = "workspaceTitlebarColor";
 const WORKSPACE_TITLEBAR_COLOR_HISTORY_KEY = "workspaceTitlebarColorHistory";
 const CODEX_RESUME_STORAGE_KEY = "codexResumeCommands";
+const AGENT_HISTORY_STORAGE_KEY = "agentHistory";
+const CODEX_HISTORY_LAST_TS_KEY = "codexHistoryLastTs";
+
+type AgentProviderId = "codex" | "claude" | "gemini" | "opencode" | "unknown";
+
+type AgentHistoryEntry = {
+  id: string;
+  provider: AgentProviderId;
+  command: string;
+  cwd?: string;
+  label?: string;
+  createdAt: number;
+  lastRunAt?: number;
+};
+
+function getAgentHistoryEntries(context: vscode.ExtensionContext): AgentHistoryEntry[] {
+  const raw = context.globalState.get<unknown>(AGENT_HISTORY_STORAGE_KEY);
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((v) => v as Partial<AgentHistoryEntry>)
+    .filter((v) => typeof v?.command === "string" && typeof v?.createdAt === "number")
+    .map((v) => ({
+      id: typeof v.id === "string" && v.id ? v.id : (v.command as string).toLowerCase(),
+      provider: (v.provider as AgentProviderId) ?? "unknown",
+      command: (v.command as string).trim(),
+      cwd: typeof v.cwd === "string" ? v.cwd : undefined,
+      label: typeof v.label === "string" ? v.label : undefined,
+      createdAt: v.createdAt as number,
+      lastRunAt: typeof v.lastRunAt === "number" ? v.lastRunAt : undefined
+    }));
+}
+
+async function upsertAgentHistoryEntry(
+  context: vscode.ExtensionContext,
+  entry: Omit<AgentHistoryEntry, "id">
+): Promise<AgentHistoryEntry> {
+  const existing = getAgentHistoryEntries(context);
+  const command = entry.command.trim();
+  const id = command.toLowerCase();
+  const next: AgentHistoryEntry = { ...entry, command, id };
+  const deduped = existing.filter((e) => e.id !== id);
+  deduped.unshift(next);
+  await context.globalState.update(AGENT_HISTORY_STORAGE_KEY, deduped.slice(0, 200));
+  return next;
+}
+
+function inferProviderFromCommand(command: string): AgentProviderId {
+  const c = command.trim().toLowerCase();
+  if (c.startsWith("codex ")) return "codex";
+  if (c.startsWith("claude ")) return "claude";
+  if (c.startsWith("gemini ")) return "gemini";
+  if (c.startsWith("opencode ")) return "opencode";
+  return "unknown";
+}
+
+function formatRelativeTime(ts: number): string {
+  const diff = Date.now() - ts;
+  const min = Math.round(diff / 60000);
+  if (min < 1) return "just now";
+  if (min < 60) return `${min}m ago`;
+  const h = Math.round(min / 60);
+  if (h < 48) return `${h}h ago`;
+  const d = Math.round(h / 24);
+  return `${d}d ago`;
+}
+
+class AgentHistoryItem extends vscode.TreeItem {
+  constructor(
+    public readonly entry: AgentHistoryEntry
+  ) {
+    const label = entry.label ? entry.label : entry.command;
+    super(label, vscode.TreeItemCollapsibleState.None);
+    this.description = entry.cwd ? entry.cwd : undefined;
+    const last = entry.lastRunAt ?? entry.createdAt;
+    this.tooltip = `${entry.provider.toUpperCase()} • ${formatRelativeTime(last)}\n${entry.command}`;
+    this.contextValue = "agentHistoryItem";
+    this.command = {
+      command: "pkvsconf.agentHistoryRun",
+      title: "Run",
+      arguments: [entry]
+    };
+    this.iconPath = new vscode.ThemeIcon("history");
+  }
+}
+
+class AgentHistoryProvider implements vscode.TreeDataProvider<AgentHistoryItem> {
+  private readonly _onDidChangeTreeData = new vscode.EventEmitter<void>();
+  readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
+
+  constructor(private readonly context: vscode.ExtensionContext) {}
+
+  refresh(): void {
+    this._onDidChangeTreeData.fire();
+  }
+
+  getTreeItem(element: AgentHistoryItem): vscode.TreeItem {
+    return element;
+  }
+
+  getChildren(): AgentHistoryItem[] {
+    return getAgentHistoryEntries(this.context).map((e) => new AgentHistoryItem(e));
+  }
+}
 
 type CodexResumeEntry = {
   id: string;
@@ -138,6 +241,48 @@ async function readCodexHistory(): Promise<CodexHistoryEntry[]> {
   }
 }
 
+function getCodexHistoryLastTs(context: vscode.ExtensionContext): number {
+  const raw = context.globalState.get<unknown>(CODEX_HISTORY_LAST_TS_KEY);
+  return typeof raw === "number" && isFinite(raw) ? raw : 0;
+}
+
+async function setCodexHistoryLastTs(context: vscode.ExtensionContext, ts: number): Promise<void> {
+  await context.globalState.update(CODEX_HISTORY_LAST_TS_KEY, ts);
+}
+
+async function importCodexSessionsFromHistory(
+  context: vscode.ExtensionContext,
+  agentHistoryProvider: AgentHistoryProvider
+): Promise<void> {
+  const entries = await readCodexHistory();
+  if (!entries.length) {
+    return;
+  }
+
+  const lastSeen = getCodexHistoryLastTs(context);
+  const fresh = entries
+    .filter((e) => typeof e.ts === "number" && e.ts > lastSeen && typeof e.session_id === "string" && e.session_id)
+    .sort((a, b) => a.ts - b.ts);
+
+  if (!fresh.length) {
+    return;
+  }
+
+  let maxTs = lastSeen;
+  for (const e of fresh) {
+    maxTs = Math.max(maxTs, e.ts);
+    await upsertAgentHistoryEntry(context, {
+      provider: "codex",
+      command: `codex resume ${e.session_id}`,
+      createdAt: Math.round(e.ts * 1000),
+      label: `Codex session ${e.session_id.slice(0, 8)}`
+    });
+  }
+
+  await setCodexHistoryLastTs(context, maxTs);
+  agentHistoryProvider.refresh();
+}
+
 async function readCodexSessionIndex(): Promise<CodexSessionIndexEntry[]> {
   const sessionIndexPath = path.join(os.homedir(), ".codex", "session_index.jsonl");
   try {
@@ -226,6 +371,7 @@ async function suggestCodexSessions(
 type LaunchpadProject = {
   name: string;
   path: string;
+  lastOpened?: number;
 };
 
 type LaunchpadQuickPickItem = vscode.QuickPickItem & {
@@ -328,7 +474,7 @@ async function addCurrentWorkspaceToLaunchpad() {
 
 async function openLaunchpadQuickPick() {
   while (true) {
-    const projects = getLaunchpadProjects();
+    const projects = getSortedLaunchpadProjects();
     const projectItems = await buildLaunchpadQuickPickItems(projects);
     const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 
@@ -388,8 +534,31 @@ async function openLaunchpadQuickPick() {
 }
 
 async function openProjectInNewWindow(projectPath: string) {
+  await recordLaunchpadOpen(projectPath);
   const uri = vscode.Uri.file(projectPath);
   await vscode.commands.executeCommand("vscode.openFolder", uri, true);
+}
+
+async function recordLaunchpadOpen(projectPath: string) {
+  const projects = getLaunchpadProjects();
+  const normalized = path.normalize(projectPath);
+  const idx = projects.findIndex((p) => path.normalize(p.path) === normalized);
+  if (idx !== -1) {
+    projects[idx].lastOpened = Date.now();
+    await vscode.workspace
+      .getConfiguration("pkvsconf")
+      .update("launchpad.projects", projects, vscode.ConfigurationTarget.Global);
+  }
+}
+
+function getSortedLaunchpadProjects(): LaunchpadProject[] {
+  const projects = getLaunchpadProjects();
+  return projects.sort((a, b) => {
+    const ta = a.lastOpened ?? 0;
+    const tb = b.lastOpened ?? 0;
+    if (ta !== tb) return tb - ta;
+    return a.name.localeCompare(b.name);
+  });
 }
 
 async function revealProjectInFinder(project?: LaunchpadProject) {
@@ -401,7 +570,7 @@ async function revealProjectInFinder(project?: LaunchpadProject) {
 }
 
 async function pickProjectForAction(placeHolder: string): Promise<LaunchpadProject | undefined> {
-  const projects = getLaunchpadProjects();
+  const projects = getSortedLaunchpadProjects();
   const items = await buildLaunchpadQuickPickItems(projects);
   const pick = await vscode.window.showQuickPick(items, { placeHolder });
   return pick?.project;
@@ -437,6 +606,9 @@ async function buildLaunchpadQuickPickItems(
     projects.map(async (project) => ({
       label: project.name || path.basename(project.path),
       description: project.path,
+      detail: project.lastOpened
+        ? `Ouvert ${formatRelativeTime(project.lastOpened)}`
+        : undefined,
       project,
       iconPath: await getProjectIconFileUri(project)
     }))
@@ -505,7 +677,8 @@ async function buildLaunchpadHtml(webview: vscode.Webview, projects: LaunchpadPr
     projects.map(async (p) => ({
       name: p.name || path.basename(p.path),
       path: p.path,
-      icon: await getProjectIcon(p)
+      icon: await getProjectIcon(p),
+      lastOpened: p.lastOpened
     }))
   );
 
@@ -514,9 +687,10 @@ async function buildLaunchpadHtml(webview: vscode.Webview, projects: LaunchpadPr
   const gridCardsHtml = cards
     .map(
       (c) => `
-        <button class="card" data-path="${c.path}" title="${c.name}">
+        <button class="card${c.lastOpened ? ' recent' : ''}" data-path="${c.path}" title="${c.name}${c.lastOpened ? ' — ' + formatRelativeTime(c.lastOpened) : ''}">
           <img src="${c.icon}" alt="${c.name}" />
           <div class="name">${c.name}</div>
+          ${c.lastOpened ? '<div class="badge recent">récent</div>' : ''}
         </button>`
     )
     .join("");
@@ -524,8 +698,9 @@ async function buildLaunchpadHtml(webview: vscode.Webview, projects: LaunchpadPr
   const miniItemsHtml = cards
     .map(
       (c) => `
-        <button class="miniItem" data-path="${c.path}" type="button" aria-label="${c.name}" title="${c.name}">
+        <button class="miniItem${c.lastOpened ? ' recent' : ''}" data-path="${c.path}" type="button" aria-label="${c.name}" title="${c.name}${c.lastOpened ? ' — ' + formatRelativeTime(c.lastOpened) : ''}">
           <img src="${c.icon}" alt="${c.name}" />
+          ${c.lastOpened ? '<div class="miniBadge recent">●</div>' : ''}
         </button>`
     )
     .join("");
@@ -669,6 +844,26 @@ async function buildLaunchpadHtml(webview: vscode.Webview, projects: LaunchpadPr
         }
         .miniAdd:hover {
           background: var(--vscode-list-hoverBackground);
+        }
+        .card.recent {
+          background: var(--vscode-list-activeSelectionBackground, rgba(100,100,255,0.08));
+        }
+        .badge.recent {
+          font-size: 9px;
+          color: var(--vscode-descriptionForeground);
+          margin-top: 2px;
+          opacity: 0.7;
+        }
+        .miniItem.recent {
+          position: relative;
+        }
+        .miniBadge.recent {
+          position: absolute;
+          top: 0;
+          right: 0;
+          font-size: 6px;
+          color: var(--vscode-terminal-ansiGreen, #4ec9b0);
+          line-height: 1;
         }
       </style>
     </head>
@@ -865,7 +1060,7 @@ class LaunchpadWebviewProvider implements vscode.WebviewViewProvider {
   }
 
   async render(view: vscode.WebviewView): Promise<void> {
-    const projects = getLaunchpadProjects();
+    const projects = getSortedLaunchpadProjects();
     view.webview.html = await buildLaunchpadHtml(view.webview, projects);
   }
 
@@ -1481,21 +1676,25 @@ function buildHtml(
       color-scheme: light dark;
     }
 
-    body {
+    html, body {
       margin: 0;
       padding: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      height: 100vh;
+      height: 100%;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
 
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 96px;
+    }
+
     .icon {
-      width: 100%;
-      height: 100%;
+      max-width: 100%;
+      max-height: 64px;
       object-fit: contain;
-      padding: 12px;
+      padding: 8px;
       box-sizing: border-box;
     }
 
@@ -2540,6 +2739,7 @@ export function activate(context: vscode.ExtensionContext) {
   );
   const launchpadProvider = new LaunchpadWebviewProvider(context);
   const notesProvider = new ProjectNotesViewProvider();
+  const agentHistoryProvider = new AgentHistoryProvider(context);
 
   const updateWorkspace = async () => {
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
@@ -2555,6 +2755,10 @@ export function activate(context: vscode.ExtensionContext) {
     if (!workspaceRoot) {
       return;
     }
+
+    // Keep Launchpad ordering "most recent first" even when the workspace
+    // was opened outside of the Launchpad UI (File > Open..., recent, etc.).
+    await recordLaunchpadOpen(workspaceRoot);
 
     await ensureWorkspaceTitlebarColor(context);
 
@@ -2582,6 +2786,17 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(PROJECT_NOTES_VIEW_ID, notesProvider)
   );
+  context.subscriptions.push(
+    vscode.window.registerTreeDataProvider("agentHistoryView", agentHistoryProvider)
+  );
+
+  // Auto-import Codex sessions from ~/.codex/history.jsonl so sessions created
+  // in any terminal show up in Agent History.
+  const codexImportInterval = setInterval(() => {
+    void importCodexSessionsFromHistory(context, agentHistoryProvider);
+  }, 4000);
+  context.subscriptions.push({ dispose: () => clearInterval(codexImportInterval) });
+  void importCodexSessionsFromHistory(context, agentHistoryProvider);
 
   void updateWorkspace();
 
@@ -3056,6 +3271,11 @@ export function activate(context: vscode.ExtensionContext) {
         command,
         createdAt: Date.now()
       });
+      await upsertAgentHistoryEntry(context, {
+        provider: "codex",
+        command: saved.command,
+        createdAt: Date.now()
+      });
       await vscode.env.clipboard.writeText(saved.command);
       vscode.window.showInformationMessage(`Saved: ${saved.command}`);
     }
@@ -3090,6 +3310,12 @@ export function activate(context: vscode.ExtensionContext) {
         label: label.trim() || undefined,
         createdAt: Date.now()
       });
+      await upsertAgentHistoryEntry(context, {
+        provider: "codex",
+        command: saved.command,
+        label: saved.label,
+        createdAt: Date.now()
+      });
       await vscode.env.clipboard.writeText(saved.command);
       vscode.window.showInformationMessage(`Saved: ${saved.command}`);
     }
@@ -3120,6 +3346,90 @@ export function activate(context: vscode.ExtensionContext) {
 
       await vscode.env.clipboard.writeText(pick.entry.command);
       vscode.window.showInformationMessage(`Copied: ${pick.entry.command}`);
+    }
+  );
+
+  const agentHistoryAddFromClipboardCmd = vscode.commands.registerCommand(
+    "pkvsconf.agentHistoryAddFromClipboard",
+    async () => {
+      const clipboard = (await vscode.env.clipboard.readText()).trim();
+      if (!clipboard) {
+        vscode.window.showWarningMessage("Presse-papiers vide.");
+        return;
+      }
+
+      const provider = inferProviderFromCommand(clipboard);
+      const command = clipboard;
+      const label = await vscode.window.showInputBox({
+        title: "Agent History",
+        prompt: "Label (optionnel)",
+        placeHolder: "objectif / repo / note",
+        value: ""
+      });
+      if (label === undefined) return;
+
+      const wsRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      await upsertAgentHistoryEntry(context, {
+        provider,
+        command,
+        cwd: wsRoot,
+        label: label.trim() || undefined,
+        createdAt: Date.now()
+      });
+
+      agentHistoryProvider.refresh();
+      vscode.window.showInformationMessage("Ajouté à l'historique.");
+    }
+  );
+
+  const agentHistoryRunCmd = vscode.commands.registerCommand(
+    "pkvsconf.agentHistoryRun",
+    async (entry?: AgentHistoryEntry) => {
+      const entries = getAgentHistoryEntries(context);
+      const target = entry ?? (
+        await vscode.window.showQuickPick(
+          entries.map((e) => ({
+            label: e.label ? e.label : e.command,
+            description: `${e.provider}${e.cwd ? ` • ${e.cwd}` : ""}`,
+            entry: e
+          })),
+          { placeHolder: "Lancer quelle session ?" }
+        )
+      )?.entry;
+
+      if (!target) return;
+
+      const cwd = target.cwd ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      const term = vscode.window.createTerminal({
+        name: target.label ? `${target.provider}: ${target.label}` : `${target.provider}: agent`,
+        cwd
+      });
+      term.show(true);
+      term.sendText(target.command, true);
+
+      await upsertAgentHistoryEntry(context, {
+        provider: target.provider,
+        command: target.command,
+        cwd: target.cwd,
+        label: target.label,
+        createdAt: target.createdAt,
+        lastRunAt: Date.now()
+      });
+      agentHistoryProvider.refresh();
+    }
+  );
+
+  const agentHistoryClearCmd = vscode.commands.registerCommand(
+    "pkvsconf.agentHistoryClear",
+    async () => {
+      const choice = await vscode.window.showWarningMessage(
+        "Vider tout l'historique Agent ?",
+        "Vider",
+        "Annuler"
+      );
+      if (choice !== "Vider") return;
+      await context.globalState.update(AGENT_HISTORY_STORAGE_KEY, []);
+      agentHistoryProvider.refresh();
     }
   );
 
@@ -3658,6 +3968,9 @@ export function activate(context: vscode.ExtensionContext) {
     codexPickResumeCmd,
     codexPickRecentSessionCmd,
     codexSuggestSessionCmd,
+    agentHistoryAddFromClipboardCmd,
+    agentHistoryRunCmd,
+    agentHistoryClearCmd,
     regenerateTitlebarColorCmd,
     previewActivePageCmd,
     showSecretsCmd,
