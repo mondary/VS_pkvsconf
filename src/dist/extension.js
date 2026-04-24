@@ -1411,6 +1411,7 @@ function buildHtml(webview, iconPath, fallbackMessage) {
       margin: 0;
       padding: 0;
       height: 100%;
+      width: 100%;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
 
@@ -1418,15 +1419,24 @@ function buildHtml(webview, iconPath, fallbackMessage) {
       display: flex;
       align-items: center;
       justify-content: center;
-      min-height: 96px;
+      overflow: hidden;
+    }
+
+    .container {
+      height: 100%;
+      width: 100%;
+      padding: 8px;
+      box-sizing: border-box;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
 
     .icon {
-      max-width: 100%;
-      max-height: 64px;
+      display: block;
+      width: 100%;
+      height: 100%;
       object-fit: contain;
-      padding: 8px;
-      box-sizing: border-box;
     }
 
     .fallback {
@@ -1439,7 +1449,7 @@ function buildHtml(webview, iconPath, fallbackMessage) {
   </style>
 </head>
 <body>
-  ${bodyContent}
+  <div class="container">${bodyContent}</div>
 </body>
 </html>`;
 }
