@@ -2,7 +2,7 @@
   "name": "vs-pkvsconf",
   "displayName": "VS_pkvsconf",
   "description": "Adds a toolbar button in Explorer to reveal the active file in Finder.",
-  "version": "2.2.26",
+  "version": "2.2.27",
   "publisher": "Cmondary",
   "icon": "icon.png",
   "license": "MIT",
@@ -60,6 +60,13 @@
           "id": "pkvsconfNotesContainer",
           "title": "Notes",
           "icon": "resources/notes-container.svg"
+        }
+      ],
+      "auxiliarybar": [
+        {
+          "id": "pkvsconfRightSidebar",
+          "title": "Workspace",
+          "icon": "resources/workspace-container.svg"
         }
       ]
     },
@@ -261,14 +268,15 @@
           "visibility": "visible"
         }
       ],
-      "pkvsconfNotesContainer": [
+      "pkvsconfRightSidebar": [
         {
           "id": "projectNotesView",
           "name": "Notes Projet",
           "type": "webview",
           "collapsed": false
         }
-      ]
+      ],
+      "pkvsconfNotesContainer": []
     },
     "menus": {
       "commandPalette": [
