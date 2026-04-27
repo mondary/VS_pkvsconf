@@ -45,3 +45,8 @@ Do not rely on the user to name the skill explicitly if the matching workflow
 already exists there.
 
 Secrets remain local to each skill and must not be committed.
+
+## Versioning (Hard Rule)
+
+On **every change that modifies shipped behavior or assets**, bump extension
+version in `src/package.json` (SemVer `x.y.z`) **before** building/packaging.

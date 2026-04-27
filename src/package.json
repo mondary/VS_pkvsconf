@@ -2,7 +2,7 @@
   "name": "vs-pkvsconf",
   "displayName": "VS_pkvsconf",
   "description": "Adds a toolbar button in Explorer to reveal the active file in Finder.",
-  "version": "2.2.17",
+  "version": "2.2.19",
   "publisher": "Cmondary",
   "icon": "icon.png",
   "license": "MIT",
@@ -349,10 +349,11 @@
     ]
   },
   "scripts": {
+    "ensure:version-bump": "node ./scripts/ensure-version-bump.mjs",
     "build": "tsc -p .",
     "watch": "tsc -w -p .",
     "package": "mkdir -p ../release && vsce package -o ../release/${npm_package_name}-${npm_package_version}.vsix",
-    "release": "npm run build && npm run package"
+    "release": "npm run ensure:version-bump && npm run build && npm run package"
   },
   "devDependencies": {
     "@types/node": "^20.14.10",

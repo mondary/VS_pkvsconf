@@ -1689,6 +1689,8 @@ function buildHtml(
       align-items: center;
       justify-content: center;
       overflow: hidden;
+      background: var(--vscode-sideBar-background);
+      color: var(--vscode-foreground);
     }
 
     .container {
@@ -1699,6 +1701,7 @@ function buildHtml(
       display: flex;
       align-items: center;
       justify-content: center;
+      background: var(--vscode-sideBar-background);
     }
 
     .icon {
