@@ -2,7 +2,7 @@
   "name": "vs-pkvsconf",
   "displayName": "VS_pkvsconf",
   "description": "Adds a toolbar button in Explorer to reveal the active file in Finder.",
-  "version": "2.2.19",
+  "version": "2.2.26",
   "publisher": "Cmondary",
   "icon": "icon.png",
   "license": "MIT",
@@ -34,6 +34,9 @@
     "onCommand:pkvsconf.rescanSecrets",
     "onCommand:pkvsconf.commitWithSecretCheck",
     "onCommand:pkvsconf.createSkillsSymlink",
+    "onCommand:pkvsconf.terminalSplitRight",
+    "onCommand:pkvsconf.terminalSplitBottom",
+    "onCommand:pkvsconf.terminalNewTab",
     "onCommand:pkvsconf.launchpadOpen",
     "onCommand:pkvsconf.launchpadAddCurrent",
     "onCommand:pkvsconf.launchpadAddFolder",
@@ -51,6 +54,32 @@
   ],
   "main": "./dist/extension.js",
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "pkvsconfNotesContainer",
+          "title": "Notes",
+          "icon": "resources/notes-container.svg"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "pkvsconf.terminalSplitRight",
+        "title": "Terminal: Split Right (PK)",
+        "category": "PK VS Conf"
+      },
+      {
+        "command": "pkvsconf.terminalSplitBottom",
+        "title": "Terminal: Split Bottom (PK)",
+        "category": "PK VS Conf"
+      },
+      {
+        "command": "pkvsconf.terminalNewTab",
+        "title": "Terminal: New Tab (PK)",
+        "category": "PK VS Conf"
+      }
+    ],
     "configuration": {
       "title": "PK VS Conf",
       "properties": {
@@ -219,12 +248,6 @@
           "type": "webview"
         },
         {
-          "id": "projectNotesView",
-          "name": "Notes Projet",
-          "type": "webview",
-          "collapsed": false
-        },
-        {
           "id": "launchpadExplorerView",
           "name": "Launchpad Projets",
           "type": "webview",
@@ -236,6 +259,14 @@
           "type": "webview",
           "collapsed": false,
           "visibility": "visible"
+        }
+      ],
+      "pkvsconfNotesContainer": [
+        {
+          "id": "projectNotesView",
+          "name": "Notes Projet",
+          "type": "webview",
+          "collapsed": false
         }
       ]
     },
@@ -335,6 +366,21 @@
       ]
     },
     "keybindings": [
+      {
+        "command": "pkvsconf.terminalSplitRight",
+        "key": "cmd+d",
+        "when": "terminalFocus"
+      },
+      {
+        "command": "pkvsconf.terminalSplitBottom",
+        "key": "cmd+shift+d",
+        "when": "terminalFocus"
+      },
+      {
+        "command": "pkvsconf.terminalNewTab",
+        "key": "cmd+t",
+        "when": "terminalFocus"
+      },
       {
         "command": "pkvsconf.commitWithSecretCheck",
         "key": "ctrl+shift+enter",

@@ -3963,39 +3963,27 @@ export function activate(context: vscode.ExtensionContext) {
     }
   );
 
-  context.subscriptions.push(
-    cmd,
-    refreshCmd,
-    openRepoCmd,
-    rootSizeItem,
-    previewItem,
-    titlebarColorItem,
-    secretsItem,
-    launchpadItem
+  const terminalSplitRightCmd = vscode.commands.registerCommand(
+    "pkvsconf.terminalSplitRight",
+    async () => {
+      await vscode.commands.executeCommand("workbench.action.terminal.split");
+    }
   );
-  context.subscriptions.push(
-    manageCategoryCmd,
-    searchExtensionsCmd,
-    codexCaptureResumeCmd,
-    codexSaveResumeCmd,
-    codexPickResumeCmd,
-    codexPickRecentSessionCmd,
-    codexSuggestSessionCmd,
-    agentHistoryAddFromClipboardCmd,
-    agentHistoryRunCmd,
-    agentHistoryClearCmd,
-    regenerateTitlebarColorCmd,
-    previewActivePageCmd,
-    showSecretsCmd,
-    rescanSecretsCmd,
-    commitWithSecretCheckCmd,
-    createSkillsSymlinkCmd,
-    skillsSymlinkItem,
-    launchpadOpenCmd,
-    launchpadAddCmd,
-    launchpadAddFolderCmd,
-    launchpadToggleViewModeCmd,
-    launchpadRevealCmd
+
+  const terminalNewTabCmd = vscode.commands.registerCommand(
+    "pkvsconf.terminalNewTab",
+    async () => {
+      await vscode.commands.executeCommand("workbench.action.createTerminalEditor");
+    }
+  );
+
+  const terminalSplitBottomCmd = vscode.commands.registerCommand(
+    "pkvsconf.terminalSplitBottom",
+    async () => {
+      // VS Code can't split a *single* terminal buffer vertically like tmux.
+      // Crée un terminal dans un panneau en dessous
+      await vscode.commands.executeCommand("workbench.action.terminal.newInActiveGroup");
+    }
   );
 
   void refreshRootSize();
@@ -4012,8 +4000,12 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.workspace.onDidChangeWorkspaceFolders(() => {
       void refreshRootSize();
-    })
+    }),
+    terminalSplitRightCmd,
+    terminalNewTabCmd,
+    terminalSplitBottomCmd
   );
 }
+
 
 export function deactivate() {}

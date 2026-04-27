@@ -3148,8 +3148,17 @@ function activate(context) {
             vscode.window.showInformationMessage(`${symlinkStatus}, .gitignore mis à jour.`);
         }
     });
-    context.subscriptions.push(cmd, refreshCmd, openRepoCmd, rootSizeItem, previewItem, titlebarColorItem, secretsItem, launchpadItem);
-    context.subscriptions.push(manageCategoryCmd, searchExtensionsCmd, codexCaptureResumeCmd, codexSaveResumeCmd, codexPickResumeCmd, codexPickRecentSessionCmd, codexSuggestSessionCmd, agentHistoryAddFromClipboardCmd, agentHistoryRunCmd, agentHistoryClearCmd, regenerateTitlebarColorCmd, previewActivePageCmd, showSecretsCmd, rescanSecretsCmd, commitWithSecretCheckCmd, createSkillsSymlinkCmd, skillsSymlinkItem, launchpadOpenCmd, launchpadAddCmd, launchpadAddFolderCmd, launchpadToggleViewModeCmd, launchpadRevealCmd);
+    const terminalSplitRightCmd = vscode.commands.registerCommand("pkvsconf.terminalSplitRight", async () => {
+        await vscode.commands.executeCommand("workbench.action.terminal.split");
+    });
+    const terminalNewTabCmd = vscode.commands.registerCommand("pkvsconf.terminalNewTab", async () => {
+        await vscode.commands.executeCommand("workbench.action.createTerminalEditor");
+    });
+    const terminalSplitBottomCmd = vscode.commands.registerCommand("pkvsconf.terminalSplitBottom", async () => {
+        // VS Code can't split a *single* terminal buffer vertically like tmux.
+        // Crée un terminal dans un panneau en dessous
+        await vscode.commands.executeCommand("workbench.action.terminal.newInActiveGroup");
+    });
     void refreshRootSize();
     const refreshIntervalMs = 5 * 60 * 1000;
     const refreshInterval = setInterval(() => {
@@ -3160,7 +3169,7 @@ function activate(context) {
     });
     context.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(() => {
         void refreshRootSize();
-    }));
+    }), terminalSplitRightCmd, terminalNewTabCmd, terminalSplitBottomCmd);
 }
 function deactivate() { }
 //# sourceMappingURL=extension.js.map
