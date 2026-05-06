@@ -3830,7 +3830,17 @@ export function activate(context: vscode.ExtensionContext) {
         "/CODEX.md",
         "/GEMINI.md",
         "/GLM.md",
-        "/OPENCODE.md"
+        "/OPENCODE.md",
+        // Additional patterns from VS_pkspecs
+        ".*",
+        ".DS_Store",
+        "node_modules/",
+        "dist/",
+        "build/",
+        ".env",
+        ".venv/",
+        "__pycache__/",
+        "*.log"
       ];
 
       const ensureGitignoreHasSkills = async () => {
@@ -3945,6 +3955,40 @@ export function activate(context: vscode.ExtensionContext) {
         );
       }
 
+      // Create VERSION file if it doesn't exist (from VS_pkspecs)
+      let versionCreated = false;
+      try {
+        const versionPath = path.join(workspaceRoot, "VERSION");
+        await fs.access(versionPath);
+      } catch {
+        try {
+          await fs.writeFile(path.join(workspaceRoot, "VERSION"), "0.10", "utf8");
+          versionCreated = true;
+        } catch (error) {
+          vscode.window.showWarningMessage(
+            `Impossible de créer VERSION: ${error}`
+          );
+        }
+      }
+
+      // Create CHANGELOG.md if it doesn't exist (from VS_pkspecs)
+      let changelogCreated = false;
+      try {
+        const changelogPath = path.join(workspaceRoot, "CHANGELOG.md");
+        await fs.access(changelogPath);
+      } catch {
+        try {
+          const today = new Date().toISOString().split("T")[0];
+          const changelogContent = `# Changelog\n\n## [0.10] - ${today}\n### Added\n- Initial project scaffold\n`;
+          await fs.writeFile(path.join(workspaceRoot, "CHANGELOG.md"), changelogContent, "utf8");
+          changelogCreated = true;
+        } catch (error) {
+          vscode.window.showWarningMessage(
+            `Impossible de créer CHANGELOG.md: ${error}`
+          );
+        }
+      }
+
       const symlinkStatus = symlinkCreated
         ? "Lien symbolique '.agent' créé"
         : symlinkUpdated
@@ -3953,10 +3997,17 @@ export function activate(context: vscode.ExtensionContext) {
             ? "Dossier '.agent' local conservé (pas de symlink)"
             : "Lien symbolique '.agent' déjà présent";
 
-      if (agentFilesLinked) {
-        vscode.window.showInformationMessage(
-          `${symlinkStatus}, .gitignore mis à jour, et fichiers AGENT/LLM linkés.`
-        );
+      const extraParts = [];
+      if (agentFilesLinked) extraParts.push("fichiers AGENT/LLM linkés");
+      if (versionCreated) extraParts.push("VERSION créé");
+      if (changelogCreated) extraParts.push("CHANGELOG.md créé");
+
+      const extraMsg = extraParts.length > 0 ? `, .gitignore mis à jour${extraParts.length ? ", " + extraParts.join(", ") : ""}` : "";
+
+      if (extraParts.length > 0) {
+        vscode.window.showInformationMessage(`${symlinkStatus}${extraMsg}.`);
+      } else if (agentFilesLinked) {
+        vscode.window.showInformationMessage(`${symlinkStatus}, .gitignore mis à jour, et fichiers AGENT/LLM linkés.`);
       } else {
         vscode.window.showInformationMessage(`${symlinkStatus}, .gitignore mis à jour.`);
       }
