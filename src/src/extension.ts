@@ -472,6 +472,37 @@ async function addCurrentWorkspaceToLaunchpad() {
   vscode.window.showInformationMessage("Projet ajouté au Launchpad.");
 }
 
+async function removeProjectFromLaunchpad() {
+  const projects = getLaunchpadProjects();
+  if (projects.length === 0) {
+    vscode.window.showInformationMessage("Le Launchpad est vide.");
+    return;
+  }
+
+  const selected = await vscode.window.showQuickPick(
+    projects.map((p) => ({
+      label: p.name || path.basename(p.path),
+      description: p.path,
+      project: p
+    })),
+    { placeHolder: "Sélectionne le projet à retirer du Launchpad" }
+  );
+
+  if (!selected) {
+    return;
+  }
+
+  const updatedProjects = projects.filter(
+    (p) => path.normalize(p.path) !== path.normalize(selected.project.path)
+  );
+
+  await vscode.workspace
+    .getConfiguration("pkvsconf")
+    .update("launchpad.projects", updatedProjects, vscode.ConfigurationTarget.Global);
+
+  vscode.window.showInformationMessage(`Projet "${selected.label}" retiré du Launchpad.`);
+}
+
 async function openLaunchpadQuickPick() {
   while (true) {
     const projects = getSortedLaunchpadProjects();
@@ -3118,6 +3149,14 @@ export function activate(context: vscode.ExtensionContext) {
     "pkvsconf.launchpadAddFolder",
     async () => {
       await addFolderToLaunchpad();
+      await refreshLaunchpadViews();
+    }
+  );
+
+  const launchpadRemoveCmd = vscode.commands.registerCommand(
+    "pkvsconf.launchpadRemove",
+    async () => {
+      await removeProjectFromLaunchpad();
       await refreshLaunchpadViews();
     }
   );
