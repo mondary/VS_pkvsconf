@@ -1,0 +1,836 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sleek Launchpad</title>
+  <!-- Modern Google Font -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    :root {
+      --bg-color: #08080a;
+      --card-bg: rgba(255, 255, 255, 0.03);
+      --card-border: rgba(255, 255, 255, 0.07);
+      --card-hover-bg: rgba(255, 255, 255, 0.07);
+      --card-hover-border: rgba(255, 255, 255, 0.15);
+      --text-color: #f3f4f6;
+      --text-muted: #9ca3af;
+      --accent-color: #6366f1;
+      --accent-glow: rgba(99, 102, 241, 0.15);
+      
+      --grid-cols: 5;
+      --grid-gap: 24px;
+      --card-aspect: 1; /* Square by default */
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Outfit', sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      min-height: 100vh;
+      overflow-x: hidden;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      position: relative;
+    }
+
+    /* Elegant Animated Background */
+    .bg-animation {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: -1;
+      overflow: hidden;
+      pointer-events: none;
+    }
+
+    .blob {
+      position: absolute;
+      width: 600px;
+      height: 600px;
+      background: radial-gradient(circle, rgba(99, 102, 241, 0.12) 0%, rgba(168, 85, 247, 0.08) 50%, transparent 100%);
+      border-radius: 50%;
+      filter: blur(80px);
+      animation: float 25s infinite ease-in-out;
+    }
+
+    .blob-2 {
+      width: 500px;
+      height: 500px;
+      background: radial-gradient(circle, rgba(59, 130, 246, 0.1) 0%, rgba(6, 182, 212, 0.06) 50%, transparent 100%);
+      top: 40%;
+      right: -10%;
+      animation: float-reverse 30s infinite ease-in-out;
+    }
+
+    .blob-3 {
+      width: 450px;
+      height: 450px;
+      background: radial-gradient(circle, rgba(236, 72, 153, 0.08) 0%, rgba(99, 102, 241, 0.04) 50%, transparent 100%);
+      bottom: -10%;
+      left: 20%;
+      animation: float 20s infinite ease-in-out;
+    }
+
+    @keyframes float {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      33% { transform: translate(50px, -50px) scale(1.1); }
+      66% { transform: translate(-30px, 30px) scale(0.9); }
+    }
+
+    @keyframes float-reverse {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      33% { transform: translate(-60px, 40px) scale(0.95); }
+      66% { transform: translate(40px, -60px) scale(1.05); }
+    }
+
+    /* Main Container */
+    .container {
+      width: 100%;
+      max-width: 1200px;
+      padding: 40px 24px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      flex-grow: 1;
+      z-index: 1;
+    }
+
+    /* Header & Search */
+    header {
+      width: 100%;
+      max-width: 600px;
+      margin-bottom: 50px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .search-wrapper {
+      position: relative;
+      width: 100%;
+    }
+
+    .search-input {
+      width: 100%;
+      padding: 16px 20px 16px 52px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--card-border);
+      border-radius: 99px;
+      color: var(--text-color);
+      font-size: 16px;
+      font-weight: 400;
+      outline: none;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      backdrop-filter: blur(10px);
+    }
+
+    .search-input:focus {
+      background: rgba(255, 255, 255, 0.06);
+      border-color: rgba(99, 102, 241, 0.4);
+      box-shadow: 0 0 25px var(--accent-glow);
+    }
+
+    .search-icon {
+      position: absolute;
+      left: 20px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-muted);
+      width: 20px;
+      height: 20px;
+      pointer-events: none;
+      transition: color 0.3s;
+    }
+
+    .search-input:focus + .search-icon {
+      color: var(--accent-color);
+    }
+
+    .shortcut-hint {
+      position: absolute;
+      right: 20px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 6px;
+      padding: 2px 6px;
+      font-size: 11px;
+      color: var(--text-muted);
+      pointer-events: none;
+    }
+
+    /* Grid Layout */
+    .grid-container {
+      width: 100%;
+      display: grid;
+      grid-template-columns: repeat(var(--grid-cols), minmax(0, 1fr));
+      gap: var(--grid-gap);
+      transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    /* Card Item */
+    .app-card {
+      position: relative;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 20px;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-decoration: none;
+      color: inherit;
+      aspect-ratio: var(--card-aspect);
+      transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+      cursor: pointer;
+      backdrop-filter: blur(10px);
+      user-select: none;
+    }
+
+    .app-card:hover {
+      background: var(--card-hover-bg);
+      border-color: var(--card-hover-border);
+      transform: translateY(-8px) scale(1.03);
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.2), 0 0 20px rgba(255, 255, 255, 0.02);
+    }
+
+    .app-card:active {
+      transform: translateY(-2px) scale(0.98);
+    }
+
+    .icon-wrapper {
+      width: 52px;
+      height: 52px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.04);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 14px;
+      color: var(--text-color);
+      transition: all 0.3s ease;
+      box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.1);
+    }
+
+    .app-card:hover .icon-wrapper {
+      background: var(--accent-color);
+      color: #fff;
+      box-shadow: 0 0 20px var(--accent-glow);
+    }
+
+    .icon-wrapper i {
+      width: 26px;
+      height: 26px;
+    }
+
+    .app-name {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-color);
+      text-align: center;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 100%;
+    }
+
+    .app-desc {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 4px;
+      text-align: center;
+      display: none; /* Can be turned on if aspect ratio permits */
+    }
+
+    /* floating action buttons */
+    .controls {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      display: flex;
+      gap: 12px;
+      z-index: 10;
+    }
+
+    .btn-action {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: rgba(25, 25, 30, 0.7);
+      border: 1px solid var(--card-border);
+      color: var(--text-color);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      backdrop-filter: blur(12px);
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    }
+
+    .btn-action:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: var(--card-hover-border);
+      transform: translateY(-3px);
+    }
+
+    .btn-action:active {
+      transform: translateY(0);
+    }
+
+    /* Modal / Settings Overlay */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(8px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+      z-index: 100;
+    }
+
+    .modal-overlay.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .modal {
+      background: rgba(18, 18, 22, 0.95);
+      border: 1px solid var(--card-border);
+      border-radius: 24px;
+      width: 90%;
+      max-width: 460px;
+      padding: 32px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+      transform: translateY(20px) scale(0.95);
+      transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    .modal-overlay.active .modal {
+      transform: translateY(0) scale(1);
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+    }
+
+    .modal-title {
+      font-size: 20px;
+      font-weight: 600;
+    }
+
+    .btn-close {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: color 0.2s;
+    }
+
+    .btn-close:hover {
+      color: var(--text-color);
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+      font-weight: 500;
+    }
+
+    .form-control {
+      width: 100%;
+      padding: 12px 16px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      color: var(--text-color);
+      font-size: 14px;
+      outline: none;
+      transition: all 0.2s;
+    }
+
+    .form-control:focus {
+      background: rgba(255, 255, 255, 0.07);
+      border-color: var(--accent-color);
+    }
+
+    .range-value {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 4px;
+    }
+
+    .btn-submit {
+      width: 100%;
+      padding: 14px;
+      background: var(--accent-color);
+      border: none;
+      border-radius: 12px;
+      color: white;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      box-shadow: 0 4px 15px var(--accent-glow);
+    }
+
+    .btn-submit:hover {
+      opacity: 0.95;
+      transform: translateY(-1px);
+    }
+
+    /* Context menu or action overlays for cards */
+    .card-actions {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      display: flex;
+      gap: 6px;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+
+    .app-card:hover .card-actions {
+      opacity: 1;
+    }
+
+    .card-action-btn {
+      width: 26px;
+      height: 26px;
+      border-radius: 6px;
+      background: rgba(0, 0, 0, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .card-action-btn:hover {
+      color: var(--text-color);
+      background: rgba(0, 0, 0, 0.8);
+    }
+
+    .card-action-btn.delete:hover {
+      color: #ef4444;
+      background: rgba(239, 68, 68, 0.15);
+      border-color: rgba(239, 68, 68, 0.3);
+    }
+
+    /* Responsive adjusts */
+    @media (max-width: 900px) {
+      :root {
+        --grid-cols: 4 !important;
+      }
+    }
+    @media (max-width: 680px) {
+      :root {
+        --grid-cols: 3 !important;
+      }
+    }
+    @media (max-width: 480px) {
+      :root {
+        --grid-cols: 2 !important;
+      }
+    }
+
+    /* Toast notification */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      background: rgba(20, 20, 25, 0.9);
+      border: 1px solid var(--card-border);
+      padding: 12px 24px;
+      border-radius: 12px;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+      transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      z-index: 1000;
+      pointer-events: none;
+    }
+    .toast.show {
+      transform: translateX(-50%) translateY(0);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Animated background blobs -->
+  <div class="bg-animation">
+    <div class="blob"></div>
+    <div class="blob blob-2"></div>
+    <div class="blob blob-3"></div>
+  </div>
+
+  <div class="container">
+    <header>
+      <div class="search-wrapper">
+        <input type="text" id="search" class="search-input" placeholder="Rechercher une application..." autocomplete="off">
+        <i data-lucide="search" class="search-icon"></i>
+        <div class="shortcut-hint">/</div>
+      </div>
+    </header>
+
+    <main class="grid-container" id="grid">
+      <!-- Apps will be dynamically injected here -->
+    </main>
+  </div>
+
+  <!-- Bottom Floating Action Buttons -->
+  <div class="controls">
+    <button class="btn-action" id="open-settings" title="Configuration de la grille">
+      <i data-lucide="settings"></i>
+    </button>
+    <button class="btn-action" id="add-app" title="Ajouter un lien">
+      <i data-lucide="plus"></i>
+    </button>
+  </div>
+
+  <!-- Modal Configuration Layout -->
+  <div class="modal-overlay" id="settings-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 class="modal-title">Mise en page</h3>
+        <button class="btn-close" id="close-settings"><i data-lucide="x"></i></button>
+      </div>
+      <div class="form-group">
+        <label for="cols-input">Colonnes (Max)</label>
+        <input type="range" id="cols-input" min="3" max="10" step="1" class="form-control">
+        <div class="range-value">
+          <span style="font-size:12px; color:var(--text-muted);">Min: 3</span>
+          <span id="cols-val" style="font-weight:600; color:var(--accent-color);">5</span>
+          <span style="font-size:12px; color:var(--text-muted);">Max: 10</span>
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="gap-input">Espacement (px)</label>
+        <input type="range" id="gap-input" min="12" max="48" step="4" class="form-control">
+        <div class="range-value">
+          <span style="font-size:12px; color:var(--text-muted);">Compact</span>
+          <span id="gap-val" style="font-weight:600; color:var(--accent-color);">24px</span>
+          <span style="font-size:12px; color:var(--text-muted);">Espacé</span>
+        </div>
+      </div>
+      <button class="btn-submit" id="save-settings">Appliquer</button>
+    </div>
+  </div>
+
+  <!-- Modal Add App -->
+  <div class="modal-overlay" id="app-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 class="modal-title" id="app-modal-title">Ajouter un raccourci</h3>
+        <button class="btn-close" id="close-app-modal"><i data-lucide="x"></i></button>
+      </div>
+      <form id="app-form">
+        <input type="hidden" id="app-index" value="">
+        <div class="form-group">
+          <label for="app-name-input">Nom</label>
+          <input type="text" id="app-name-input" class="form-control" placeholder="ex: GitHub" required>
+        </div>
+        <div class="form-group">
+          <label for="app-url-input">URL</label>
+          <input type="url" id="app-url-input" class="form-control" placeholder="ex: https://github.com" required>
+        </div>
+        <div class="form-group">
+          <label for="app-icon-input">Icône Lucide (nom d'icône)</label>
+          <input type="text" id="app-icon-input" class="form-control" placeholder="ex: github, globe, external-link, search..." default="external-link">
+          <span style="font-size:11px; color:var(--text-muted); display:block; margin-top:4px;">
+            Utilisez des noms d'icônes Lucide (ex: chrome, play, message-square, music, settings, code)
+          </span>
+        </div>
+        <button type="submit" class="btn-submit" id="app-submit-btn">Sauvegarder</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast Notification System -->
+  <div class="toast" id="toast"></div>
+
+  <script>
+    // Initial default apps list
+    const defaultApps = [
+      { name: "Google", url: "https://www.google.com", icon: "search" },
+      { name: "GitHub", url: "https://github.com", icon: "github" },
+      { name: "YouTube", url: "https://youtube.com", icon: "play" },
+      { name: "ChatGPT", url: "https://chatgpt.com", icon: "message-square" },
+      { name: "Notion", url: "https://notion.so", icon: "book-open" },
+      { name: "Netflix", url: "https://netflix.com", icon: "tv" },
+      { name: "Spotify", url: "https://spotify.com", icon: "music" },
+      { name: "Figma", url: "https://figma.com", icon: "layers" },
+      { name: "Gmail", url: "https://mail.google.com", icon: "mail" },
+      { name: "Settings", url: "#", icon: "sliders", action: "settings" }
+    ];
+
+    // State management
+    let apps = JSON.parse(localStorage.getItem("launchpad_apps")) || defaultApps;
+    let gridSettings = JSON.parse(localStorage.getItem("launchpad_grid")) || { cols: 5, gap: 24 };
+
+    // Elements
+    const grid = document.getElementById("grid");
+    const searchInput = document.getElementById("search");
+    
+    // Modals
+    const settingsModal = document.getElementById("settings-modal");
+    const appModal = document.getElementById("app-modal");
+    const appForm = document.getElementById("app-form");
+
+    // Inputs
+    const colsInput = document.getElementById("cols-input");
+    const gapInput = document.getElementById("gap-input");
+    const colsVal = document.getElementById("cols-val");
+    const gapVal = document.getElementById("gap-val");
+
+    // Init styles and display
+    function applyStyles() {
+      document.documentElement.style.setProperty('--grid-cols', gridSettings.cols);
+      document.documentElement.style.setProperty('--grid-gap', `${gridSettings.gap}px`);
+      
+      // Update config modal inputs to match settings
+      colsInput.value = gridSettings.cols;
+      gapInput.value = gridSettings.gap;
+      colsVal.textContent = gridSettings.cols;
+      gapVal.textContent = `${gridSettings.gap}px`;
+    }
+
+    // Save grid settings
+    document.getElementById("save-settings").addEventListener("click", () => {
+      gridSettings.cols = colsInput.value;
+      gridSettings.gap = gapInput.value;
+      localStorage.setItem("launchpad_grid", JSON.stringify(gridSettings));
+      applyStyles();
+      closeModal(settingsModal);
+      showToast("Mise en page enregistrée");
+    });
+
+    // Real-time ranges feedback
+    colsInput.addEventListener("input", (e) => colsVal.textContent = e.target.value);
+    gapInput.addEventListener("input", (e) => gapVal.textContent = `${e.target.value}px`);
+
+    // Render Grid Cards
+    function render(filter = "") {
+      grid.innerHTML = "";
+      const filtered = apps.filter(app => app.name.toLowerCase().includes(filter.toLowerCase()));
+
+      filtered.forEach((app, index) => {
+        const card = document.createElement("a");
+        card.className = "app-card";
+        
+        // Handle normal vs custom actions
+        if (app.action === "settings") {
+          card.href = "#";
+          card.onclick = (e) => {
+            e.preventDefault();
+            openModal(settingsModal);
+          };
+        } else {
+          card.href = app.url;
+          card.target = "_blank";
+          card.rel = "noopener noreferrer";
+        }
+
+        // Keep standard icons safe with backup
+        const iconName = app.icon || "external-link";
+
+        card.innerHTML = `
+          <div class="icon-wrapper">
+            <i data-lucide="${iconName}"></i>
+          </div>
+          <div class="app-name">${app.name}</div>
+          <div class="card-actions">
+            ${app.action !== 'settings' ? `
+              <button class="card-action-btn edit" title="Modifier" data-index="${index}">
+                <i data-lucide="edit-3" style="width:12px; height:12px;"></i>
+              </button>
+              <button class="card-action-btn delete" title="Supprimer" data-index="${index}">
+                <i data-lucide="trash-2" style="width:12px; height:12px;"></i>
+              </button>
+            ` : ''}
+          </div>
+        `;
+
+        // Intercept action clicks
+        const editBtn = card.querySelector(".edit");
+        const deleteBtn = card.querySelector(".delete");
+
+        if (editBtn) {
+          editBtn.addEventListener("click", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            openEditApp(index);
+          });
+        }
+        if (deleteBtn) {
+          deleteBtn.addEventListener("click", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            deleteApp(index);
+          });
+        }
+
+        grid.appendChild(card);
+      });
+
+      // Re-initialize icons inside dynamic elements
+      lucide.createIcons();
+    }
+
+    // Modal Control
+    function openModal(modal) {
+      modal.classList.add("active");
+    }
+
+    function closeModal(modal) {
+      modal.classList.remove("active");
+    }
+
+    // Actions App
+    function openEditApp(index) {
+      const app = apps[index];
+      document.getElementById("app-modal-title").textContent = "Modifier le raccourci";
+      document.getElementById("app-index").value = index;
+      document.getElementById("app-name-input").value = app.name;
+      document.getElementById("app-url-input").value = app.url;
+      document.getElementById("app-icon-input").value = app.icon || "external-link";
+      openModal(appModal);
+    }
+
+    function deleteApp(index) {
+      if (confirm(`Voulez-vous vraiment supprimer ${apps[index].name} ?`)) {
+        apps.splice(index, 1);
+        saveApps();
+        render(searchInput.value);
+        showToast("Raccourci supprimé");
+      }
+    }
+
+    function saveApps() {
+      localStorage.setItem("launchpad_apps", JSON.stringify(apps));
+    }
+
+    // Form App Submit
+    appForm.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const index = document.getElementById("app-index").value;
+      const name = document.getElementById("app-name-input").value;
+      const url = document.getElementById("app-url-input").value;
+      const icon = document.getElementById("app-icon-input").value || "external-link";
+
+      const newApp = { name, url, icon };
+
+      if (index === "") {
+        // Add new
+        apps.push(newApp);
+        showToast("Raccourci ajouté");
+      } else {
+        // Edit existing
+        apps[parseInt(index)] = newApp;
+        showToast("Raccourci mis à jour");
+      }
+
+      saveApps();
+      closeModal(appModal);
+      render(searchInput.value);
+      appForm.reset();
+    });
+
+    // Event Listeners for trigger UI
+    document.getElementById("open-settings").addEventListener("click", () => openModal(settingsModal));
+    document.getElementById("close-settings").addEventListener("click", () => closeModal(settingsModal));
+
+    document.getElementById("add-app").addEventListener("click", () => {
+      document.getElementById("app-modal-title").textContent = "Ajouter un raccourci";
+      document.getElementById("app-index").value = "";
+      appForm.reset();
+      openModal(appModal);
+    });
+    document.getElementById("close-app-modal").addEventListener("click", () => closeModal(appModal));
+
+    // Close on click overlay
+    document.querySelectorAll(".modal-overlay").forEach(overlay => {
+      overlay.addEventListener("click", (e) => {
+        if (e.target === overlay) closeModal(overlay);
+      });
+    });
+
+    // Live search
+    searchInput.addEventListener("input", (e) => {
+      render(e.target.value);
+    });
+
+    // Keyboard Shortcuts
+    window.addEventListener("keydown", (e) => {
+      // '/' key to focus search (if not inside an input)
+      if (e.key === "/" && document.activeElement.tagName !== "INPUT") {
+        e.preventDefault();
+        searchInput.focus();
+        searchInput.select();
+      }
+      // Escape to close modals
+      if (e.key === "Escape") {
+        closeModal(settingsModal);
+        closeModal(appModal);
+      }
+    });
+
+    // Toast Notice helper
+    let toastTimeout;
+    function showToast(message) {
+      const toast = document.getElementById("toast");
+      toast.textContent = message;
+      toast.classList.add("show");
+      
+      clearTimeout(toastTimeout);
+      toastTimeout = setTimeout(() => {
+        toast.classList.remove("show");
+      }, 3000);
+    }
+
+    // Startup
+    applyStyles();
+    render();
+  </script>
+</body>
+</html>

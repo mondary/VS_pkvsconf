@@ -2,7 +2,7 @@
   "name": "vs-pkvsconf",
   "displayName": "VS_pkvsconf",
   "description": "Adds a toolbar button in Explorer to reveal the active file in Finder.",
-  "version": "2.4.0",
+  "version": "2.8.0",
   "publisher": "Cmondary",
   "icon": "icon.png",
   "license": "MIT",
@@ -38,6 +38,7 @@
     "onCommand:pkvsconf.terminalSplitBottom",
     "onCommand:pkvsconf.terminalNewTab",
     "onCommand:pkvsconf.launchpadOpen",
+    "onCommand:pkvsconf.launchpadOpenList",
     "onCommand:pkvsconf.launchpadAddCurrent",
     "onCommand:pkvsconf.launchpadAddFolder",
     "onCommand:pkvsconf.launchpadRevealInFinder",
@@ -103,6 +104,33 @@
             "mini"
           ],
           "description": "Mode d'affichage du Launchpad: 'grid' (tuiles) ou 'mini' (icônes 32x32 en ligne)."
+        },
+        "pkvsconf.launchpad.columns": {
+          "type": "number",
+          "default": 8,
+          "minimum": 3,
+          "maximum": 16,
+          "description": "Nombre de colonnes dans la vue Launchpad plein écran."
+        },
+        "pkvsconf.launchpad.rows": {
+          "type": "number",
+          "default": 4,
+          "minimum": 2,
+          "maximum": 10,
+          "description": "Nombre de lignes visibles ciblé dans la vue Launchpad plein écran."
+        },
+        "pkvsconf.launchpad.iconSize": {
+          "type": "number",
+          "default": 76,
+          "minimum": 42,
+          "maximum": 128,
+          "description": "Taille des pictogrammes dans la vue Launchpad plein écran."
+        },
+        "pkvsconf.launchpad.focusColor": {
+          "type": "string",
+          "default": "#008CFF",
+          "pattern": "^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$",
+          "description": "Couleur du focus clavier dans la vue Launchpad plein écran."
         }
       }
     },
@@ -189,13 +217,23 @@
       },
       {
         "command": "pkvsconf.launchpadOpen",
-        "title": "Launchpad projets",
+        "title": "Launchpad projets plein écran",
         "icon": "$(rocket)"
+      },
+      {
+        "command": "pkvsconf.launchpadOpenList",
+        "title": "Launchpad projets: liste",
+        "icon": "$(list-unordered)"
       },
       {
         "command": "pkvsconf.launchpadAddCurrent",
         "title": "Ajouter le projet courant au Launchpad",
         "icon": "$(add)"
+      },
+      {
+        "command": "pkvsconf.launchpadAddFolder",
+        "title": "Ajouter un dossier au Launchpad",
+        "icon": "$(folder-add)"
       },
       {
         "command": "pkvsconf.launchpadRevealInFinder",
@@ -404,6 +442,31 @@
         "command": "pkvsconf.launchpadOpen",
         "key": "ctrl+alt+l",
         "mac": "cmd+alt+l"
+      },
+      {
+        "command": "pkvsconf.launchpadOpenList",
+        "key": "ctrl+alt+p",
+        "mac": "cmd+alt+p"
+      },
+      {
+        "command": "pkvsconf.launchpadAddCurrent",
+        "key": "ctrl+alt+shift+c",
+        "mac": "cmd+alt+shift+c"
+      },
+      {
+        "command": "pkvsconf.launchpadAddFolder",
+        "key": "ctrl+alt+shift+f",
+        "mac": "cmd+alt+shift+f"
+      },
+      {
+        "command": "pkvsconf.launchpadRevealInFinder",
+        "key": "ctrl+alt+shift+r",
+        "mac": "cmd+alt+shift+r"
+      },
+      {
+        "command": "pkvsconf.launchpadRemove",
+        "key": "ctrl+alt+shift+backspace",
+        "mac": "cmd+alt+shift+backspace"
       }
     ]
   },

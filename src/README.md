@@ -17,7 +17,7 @@
 - 🎨 Couleur de title bar par workspace
 - 🔐 Detection des secrets exposes
 - 🛡️ Blocage de commit avec secrets
-- 🚀 Launchpad projets (liste + bascule rapide)
+- 🚀 Launchpad projets (vue plein écran type macOS Launchpad + bascule rapide)
 - 🔗 Agent Skills : symlink `.agent` vers le dossier central `-agent`
 ## 🧠 Utilisation
 
@@ -30,7 +30,7 @@
 - Title bar : couleur auto par workspace, bouton pour regenerer.
 - Secrets : scan workspace + blocage de commit si secrets staged.
 - Agent Skills : cree un lien symbolique `.agent` vers le dossier central `-agent`.
-- Launchpad : ouvre un projet du launchpad, icône fusée dans la barre de status, vue dans l'explorateur, raccourci `Cmd/Ctrl+Alt+L`.
+- Launchpad : bouton `Projets` pour l'ancienne liste rapide, bouton `Launchpad` pour une grille plein écran avec recherche, navigation aux flèches, réglages lignes/colonnes/taille, ajout, suppression et ouverture en nouvelle fenêtre. Raccourci `Cmd/Ctrl+Alt+L`.
 
 ## ⚙️ Reglages
 
@@ -67,6 +67,39 @@ npm run release
 - Recharger la fenetre
 
 ## 🧾 Release Notes
+
+### 2.8.0
+
+- 🎯 Focus clavier Launchpad plus visible en bleu électrique, configurable via `pkvsconf.launchpad.focusColor`.
+- 🔤 Logos fallback ASCII 5x5 avec couleur/gradient stable différent par projet.
+
+### 2.7.1
+
+- 🎨 Launchpad plus léger : suppression des cadres autour des pictos et focus discret sur le label.
+- 🔤 Nouveau logo fallback typographique/ASCII pour les projets sans `icon.png`.
+
+### 2.7.0
+
+- 🔎 Dans le Launchpad, taper directement filtre les projets sans devoir cliquer la recherche.
+- 🖱️ Clic droit sur un projet : ouvrir, afficher dans Finder ou retirer du Launchpad.
+- 🎛️ Dock simplifié avec actions lisibles uniquement en bas.
+- ⌨️ Raccourcis clavier déclarés pour les commandes Launchpad, configurables dans les préférences VS Code.
+
+### 2.6.1
+
+- 🚀 Cliquer le projet courant dans le Launchpad ferme la vue au lieu d'ouvrir une nouvelle fenêtre.
+
+### 2.6.0
+
+- 🚀 Séparation de l'ancienne liste projets et du Launchpad plein écran en deux boutons de status bar.
+- ⌨️ Navigation au clavier dans le Launchpad avec les flèches et Entrée.
+- 🎛️ Réglages intégrés pour colonnes, lignes visibles et taille des pictogrammes, avec scroll vertical sans pagination.
+- 🖥️ Ouverture du Launchpad dans le groupe principal avec masquage des panneaux pour maximiser l'espace.
+
+### 2.5.0
+
+- 🚀 Nouveau Launchpad plein écran depuis la barre de status, inspiré du Launchpad macOS.
+- 🔎 Recherche intégrée, ajout du workspace courant/dossier, suppression et rafraîchissement depuis la vue.
 
 ### 2.2.0
 

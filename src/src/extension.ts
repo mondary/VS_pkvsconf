@@ -18,6 +18,12 @@ const WORKSPACE_TITLEBAR_COLOR_HISTORY_KEY = "workspaceTitlebarColorHistory";
 const CODEX_RESUME_STORAGE_KEY = "codexResumeCommands";
 const AGENT_HISTORY_STORAGE_KEY = "agentHistory";
 const CODEX_HISTORY_LAST_TS_KEY = "codexHistoryLastTs";
+const LAUNCHPAD_LAYOUT_DEFAULTS = {
+  columns: 8,
+  rows: 4,
+  iconSize: 76,
+  focusColor: "#008CFF"
+} as const;
 
 type AgentProviderId = "codex" | "claude" | "gemini" | "opencode" | "unknown";
 
@@ -374,6 +380,20 @@ type LaunchpadProject = {
   lastOpened?: number;
 };
 
+type LaunchpadCard = {
+  name: string;
+  path: string;
+  icon: string;
+  lastOpened?: number;
+};
+
+type LaunchpadLayoutSettings = {
+  columns: number;
+  rows: number;
+  iconSize: number;
+  focusColor: string;
+};
+
 type LaunchpadQuickPickItem = vscode.QuickPickItem & {
   project: LaunchpadProject;
 };
@@ -454,6 +474,70 @@ async function setLaunchpadViewMode(mode: "grid" | "mini") {
     .update("launchpad.viewMode", mode, vscode.ConfigurationTarget.Global);
 }
 
+function getLaunchpadLayoutSettings(): LaunchpadLayoutSettings {
+  const cfg = vscode.workspace.getConfiguration("pkvsconf");
+  return {
+    columns: clampNumber(
+      cfg.get<number>("launchpad.columns") ?? LAUNCHPAD_LAYOUT_DEFAULTS.columns,
+      3,
+      16
+    ),
+    rows: clampNumber(
+      cfg.get<number>("launchpad.rows") ?? LAUNCHPAD_LAYOUT_DEFAULTS.rows,
+      2,
+      10
+    ),
+    iconSize: clampNumber(
+      cfg.get<number>("launchpad.iconSize") ?? LAUNCHPAD_LAYOUT_DEFAULTS.iconSize,
+      42,
+      128
+    ),
+    focusColor: normalizeCssHexColor(
+      cfg.get<string>("launchpad.focusColor") ?? LAUNCHPAD_LAYOUT_DEFAULTS.focusColor,
+      LAUNCHPAD_LAYOUT_DEFAULTS.focusColor
+    )
+  };
+}
+
+async function setLaunchpadLayoutSettings(settings: Partial<LaunchpadLayoutSettings>): Promise<void> {
+  const cfg = vscode.workspace.getConfiguration("pkvsconf");
+  if (typeof settings.columns === "number") {
+    await cfg.update("launchpad.columns", clampNumber(settings.columns, 3, 16), vscode.ConfigurationTarget.Global);
+  }
+  if (typeof settings.rows === "number") {
+    await cfg.update("launchpad.rows", clampNumber(settings.rows, 2, 10), vscode.ConfigurationTarget.Global);
+  }
+  if (typeof settings.iconSize === "number") {
+    await cfg.update("launchpad.iconSize", clampNumber(settings.iconSize, 42, 128), vscode.ConfigurationTarget.Global);
+  }
+  if (typeof settings.focusColor === "string") {
+    await cfg.update(
+      "launchpad.focusColor",
+      normalizeCssHexColor(settings.focusColor, LAUNCHPAD_LAYOUT_DEFAULTS.focusColor),
+      vscode.ConfigurationTarget.Global
+    );
+  }
+}
+
+function clampNumber(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) {
+    return min;
+  }
+  return Math.min(max, Math.max(min, Math.round(value)));
+}
+
+function normalizeCssHexColor(value: string, fallback: string): string {
+  const trimmed = value.trim();
+  if (/^#[0-9a-fA-F]{6}$/.test(trimmed)) {
+    return trimmed;
+  }
+  if (/^#[0-9a-fA-F]{3}$/.test(trimmed)) {
+    const [, r, g, b] = trimmed;
+    return `#${r}${r}${g}${g}${b}${b}`;
+  }
+  return fallback;
+}
+
 async function addCurrentWorkspaceToLaunchpad() {
   const ws = vscode.workspace.workspaceFolders?.[0];
   if (!ws) {
@@ -501,6 +585,23 @@ async function removeProjectFromLaunchpad() {
     .update("launchpad.projects", updatedProjects, vscode.ConfigurationTarget.Global);
 
   vscode.window.showInformationMessage(`Projet "${selected.label}" retiré du Launchpad.`);
+}
+
+async function removeProjectFromLaunchpadByPath(projectPath: string): Promise<void> {
+  const projects = getLaunchpadProjects();
+  const normalized = path.normalize(projectPath);
+  const target = projects.find((p) => path.normalize(p.path) === normalized);
+  if (!target) {
+    vscode.window.showInformationMessage("Ce projet n'est pas dans le Launchpad.");
+    return;
+  }
+
+  const updatedProjects = projects.filter((p) => path.normalize(p.path) !== normalized);
+  await vscode.workspace
+    .getConfiguration("pkvsconf")
+    .update("launchpad.projects", updatedProjects, vscode.ConfigurationTarget.Global);
+
+  vscode.window.showInformationMessage(`Projet "${target.name || path.basename(target.path)}" retiré du Launchpad.`);
 }
 
 async function openLaunchpadQuickPick() {
@@ -564,10 +665,39 @@ async function openLaunchpadQuickPick() {
   }
 }
 
+async function maximizeEditorAreaForLaunchpad(): Promise<void> {
+  const commands = [
+    "workbench.action.joinAllGroups",
+    "workbench.action.closeSidebar",
+    "workbench.action.closeAuxiliaryBar",
+    "workbench.action.closePanel"
+  ];
+
+  for (const command of commands) {
+    try {
+      await vscode.commands.executeCommand(command);
+    } catch {
+      // Some commands are unavailable in older VS Code versions or inactive layouts.
+    }
+  }
+}
+
 async function openProjectInNewWindow(projectPath: string) {
   await recordLaunchpadOpen(projectPath);
   const uri = vscode.Uri.file(projectPath);
   await vscode.commands.executeCommand("vscode.openFolder", uri, true);
+}
+
+function isCurrentWorkspacePath(projectPath: string): boolean {
+  const workspacePath = getWorkspaceRootFsPath();
+  if (!workspacePath) {
+    return false;
+  }
+
+  const normalizeForCompare = (value: string) =>
+    path.normalize(value).replace(/[\\/]+$/, "").toLowerCase();
+
+  return normalizeForCompare(workspacePath) === normalizeForCompare(projectPath);
 }
 
 async function recordLaunchpadOpen(projectPath: string) {
@@ -646,8 +776,75 @@ async function buildLaunchpadQuickPickItems(
   );
 }
 
-function toDataUriFromSvg(title: string, bg: string): string {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="180" height="110"><rect width="100%" height="100%" rx="12" ry="12" fill="${bg}"/><text x="50%" y="55%" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="36" fill="white">${title}</text></svg>`;
+const ASCII_GLYPHS: Record<string, string[]> = {
+  A: [" ### ", "#   #", "#####", "#   #", "#   #"],
+  B: ["#### ", "#   #", "#### ", "#   #", "#### "],
+  C: [" ####", "#    ", "#    ", "#    ", " ####"],
+  D: ["#### ", "#   #", "#   #", "#   #", "#### "],
+  E: ["#####", "#    ", "#### ", "#    ", "#####"],
+  F: ["#####", "#    ", "#### ", "#    ", "#    "],
+  G: [" ####", "#    ", "#  ##", "#   #", " ####"],
+  H: ["#   #", "#   #", "#####", "#   #", "#   #"],
+  I: ["#####", "  #  ", "  #  ", "  #  ", "#####"],
+  J: ["#####", "   # ", "   # ", "#  # ", " ##  "],
+  K: ["#   #", "#  # ", "###  ", "#  # ", "#   #"],
+  L: ["#    ", "#    ", "#    ", "#    ", "#####"],
+  M: ["#   #", "## ##", "# # #", "#   #", "#   #"],
+  N: ["#   #", "##  #", "# # #", "#  ##", "#   #"],
+  O: [" ### ", "#   #", "#   #", "#   #", " ### "],
+  P: ["#### ", "#   #", "#### ", "#    ", "#    "],
+  Q: [" ### ", "#   #", "# # #", "#  # ", " ## #"],
+  R: ["#### ", "#   #", "#### ", "#  # ", "#   #"],
+  S: [" ####", "#    ", " ### ", "    #", "#### "],
+  T: ["#####", "  #  ", "  #  ", "  #  ", "  #  "],
+  U: ["#   #", "#   #", "#   #", "#   #", " ### "],
+  V: ["#   #", "#   #", "#   #", " # # ", "  #  "],
+  W: ["#   #", "#   #", "# # #", "## ##", "#   #"],
+  X: ["#   #", " # # ", "  #  ", " # # ", "#   #"],
+  Y: ["#   #", " # # ", "  #  ", "  #  ", "  #  "],
+  Z: ["#####", "   # ", "  #  ", " #   ", "#####"],
+  "0": [" ### ", "#  ##", "# # #", "##  #", " ### "],
+  "1": ["  #  ", " ##  ", "  #  ", "  #  ", "#####"],
+  "2": [" ### ", "#   #", "   # ", "  #  ", "#####"],
+  "3": ["#### ", "    #", " ### ", "    #", "#### "],
+  "4": ["#   #", "#   #", "#####", "    #", "    #"],
+  "5": ["#####", "#    ", "#### ", "    #", "#### "],
+  "6": [" ####", "#    ", "#### ", "#   #", " ### "],
+  "7": ["#####", "   # ", "  #  ", " #   ", "#    "],
+  "8": [" ### ", "#   #", " ### ", "#   #", " ### "],
+  "9": [" ### ", "#   #", " ####", "    #", "#### "]
+};
+
+function hashString(value: string): number {
+  let hash = 2166136261;
+  for (let i = 0; i < value.length; i++) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function getProjectInitials(project: LaunchpadProject): string {
+  const raw = (project.name || path.basename(project.path) || "PK").toUpperCase();
+  const words = raw.match(/[A-Z0-9]+/g) ?? ["PK"];
+  const initials = words.length > 1
+    ? words.slice(0, 2).map((w) => w[0]).join("")
+    : words[0].slice(0, 2);
+  return initials.padEnd(2, "K").slice(0, 2);
+}
+
+function buildAsciiLogoLines(text: string): string[] {
+  const glyphs = text.split("").map((char) => ASCII_GLYPHS[char] ?? ASCII_GLYPHS.P);
+  return Array.from({ length: 5 }, (_, row) => glyphs.map((glyph) => glyph[row]).join("  "));
+}
+
+function toDataUriFromSvg(title: string, colors: readonly [string, string]): string {
+  const safeTitle = title.replace(/[^A-Z0-9]/g, "").slice(0, 2) || "PK";
+  const lines = buildAsciiLogoLines(safeTitle);
+  const tspans = lines
+    .map((line, index) => `<tspan x="64" y="${32 + index * 16}">${line.replace(/ /g, "\u00A0")}</tspan>`)
+    .join("");
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128"><defs><linearGradient id="g" x1="10" y1="10" x2="118" y2="118"><stop offset="0" stop-color="${colors[0]}"/><stop offset="1" stop-color="${colors[1]}"/></linearGradient><filter id="glow"><feGaussianBlur stdDeviation="2.4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs><text font-family="ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace" font-size="14" font-weight="900" letter-spacing="0" text-anchor="middle" fill="url(#g)" filter="url(#glow)">${tspans}</text><text x="64" y="113" font-family="ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace" font-size="11" font-weight="700" text-anchor="middle" fill="${colors[1]}" opacity=".82">[${safeTitle}]</text></svg>`;
   const encoded = Buffer.from(svg).toString("base64");
   return `data:image/svg+xml;base64,${encoded}`;
 }
@@ -658,11 +855,26 @@ async function getProjectIcon(project: LaunchpadProject): Promise<string> {
     const content = await fs.readFile(candidate);
     return `data:image/png;base64,${content.toString("base64")}`;
   } catch {
-    const initials = (project.name || path.basename(project.path)).trim().slice(0, 2).toUpperCase();
-    const palette = ["#2A9D8F", "#E76F51", "#264653", "#8AB17D", "#F4A261", "#6D597A", "#1D3557"];
-    const color = palette[(project.name || project.path).length % palette.length];
-    return toDataUriFromSvg(initials, color);
+    const initials = getProjectInitials(project);
+    const palettes: Array<readonly [string, string]> = [
+      ["#00D4FF", "#006BFF"],
+      ["#FF4FD8", "#7C3AED"],
+      ["#00FF88", "#00B37A"],
+      ["#FFD166", "#FF6B35"],
+      ["#7CFFCB", "#3A86FF"],
+      ["#F72585", "#4CC9F0"],
+      ["#D8F3DC", "#52B788"],
+      ["#FDE047", "#F97316"],
+      ["#A78BFA", "#22D3EE"],
+      ["#FB7185", "#FACC15"]
+    ];
+    const palette = palettes[hashString(project.path || project.name) % palettes.length];
+    return toDataUriFromSvg(initials, palette);
   }
+}
+
+function escapeAttr(value: string): string {
+  return escapeHtml(value);
 }
 
 function getNonce(): string {
@@ -717,22 +929,28 @@ async function buildLaunchpadHtml(webview: vscode.Webview, projects: LaunchpadPr
 
   const gridCardsHtml = cards
     .map(
-      (c) => `
-        <button class="card${c.lastOpened ? ' recent' : ''}" data-path="${c.path}" title="${c.name}${c.lastOpened ? ' — ' + formatRelativeTime(c.lastOpened) : ''}">
-          <img src="${c.icon}" alt="${c.name}" />
-          <div class="name">${c.name}</div>
+      (c) => {
+        const title = `${c.name}${c.lastOpened ? " - " + formatRelativeTime(c.lastOpened) : ""}`;
+        return `
+        <button class="card${c.lastOpened ? ' recent' : ''}" data-path="${escapeAttr(c.path)}" title="${escapeAttr(title)}">
+          <img src="${escapeAttr(c.icon)}" alt="${escapeAttr(c.name)}" />
+          <div class="name">${escapeHtml(c.name)}</div>
           ${c.lastOpened ? '<div class="badge recent">récent</div>' : ''}
-        </button>`
+        </button>`;
+      }
     )
     .join("");
 
   const miniItemsHtml = cards
     .map(
-      (c) => `
-        <button class="miniItem${c.lastOpened ? ' recent' : ''}" data-path="${c.path}" type="button" aria-label="${c.name}" title="${c.name}${c.lastOpened ? ' — ' + formatRelativeTime(c.lastOpened) : ''}">
-          <img src="${c.icon}" alt="${c.name}" />
+      (c) => {
+        const title = `${c.name}${c.lastOpened ? " - " + formatRelativeTime(c.lastOpened) : ""}`;
+        return `
+        <button class="miniItem${c.lastOpened ? ' recent' : ''}" data-path="${escapeAttr(c.path)}" type="button" aria-label="${escapeAttr(c.name)}" title="${escapeAttr(title)}">
+          <img src="${escapeAttr(c.icon)}" alt="${escapeAttr(c.name)}" />
           ${c.lastOpened ? '<div class="miniBadge recent">●</div>' : ''}
-        </button>`
+        </button>`;
+      }
     )
     .join("");
 
@@ -939,6 +1157,573 @@ async function buildLaunchpadHtml(webview: vscode.Webview, projects: LaunchpadPr
   </html>`;
 }
 
+async function buildLaunchpadPanelHtml(
+  webview: vscode.Webview,
+  projects: LaunchpadProject[]
+): Promise<string> {
+  const cards: LaunchpadCard[] = await Promise.all(
+    projects.map(async (p) => ({
+      name: p.name || path.basename(p.path),
+      path: p.path,
+      icon: await getProjectIcon(p),
+      lastOpened: p.lastOpened
+    }))
+  );
+  const nonce = getNonce();
+  const currentWorkspace = getWorkspaceRootFsPath();
+  const layout = getLaunchpadLayoutSettings();
+  const cellSize = Math.max(layout.iconSize + 42, 96);
+
+  const cardsHtml = cards
+    .map((c, index) => {
+      const title = `${c.name}\n${c.path}${c.lastOpened ? "\nOuvert " + formatRelativeTime(c.lastOpened) : ""}`;
+      const initials = c.name.trim().slice(0, 2).toUpperCase();
+      return `
+        <button class="app" type="button" data-index="${index}" data-path="${escapeAttr(c.path)}" data-name="${escapeAttr(c.name.toLowerCase())}" title="${escapeAttr(title)}">
+          <span class="iconWrap">
+            <img class="icon" src="${escapeAttr(c.icon)}" alt="${escapeAttr(c.name)}" />
+          </span>
+          <span class="label">${escapeHtml(c.name || initials)}</span>
+        </button>`;
+    })
+    .join("");
+
+  return `<!DOCTYPE html>
+  <html lang="fr">
+    <head>
+      <meta charset="UTF-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: ${webview.cspSource}; style-src 'unsafe-inline' ${webview.cspSource}; script-src 'nonce-${nonce}';" />
+      <style>
+        :root {
+          color-scheme: ${vscode.window.activeColorTheme.kind === vscode.ColorThemeKind.Dark ? "dark" : "light"};
+          --cols: ${layout.columns};
+          --visible-rows: ${layout.rows};
+          --icon-size: ${layout.iconSize}px;
+          --cell-size: ${cellSize}px;
+          --focus-color: ${layout.focusColor};
+          --glass: color-mix(in srgb, var(--vscode-editor-background) 58%, transparent);
+          --glass-strong: color-mix(in srgb, var(--vscode-editor-background) 78%, transparent);
+          --text: var(--vscode-foreground);
+          --muted: var(--vscode-descriptionForeground);
+          --ring: var(--vscode-focusBorder);
+        }
+        * { box-sizing: border-box; }
+        html, body {
+          width: 100%;
+          height: 100%;
+          min-height: 100%;
+        }
+        body {
+          margin: 0;
+          overflow: hidden;
+          font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
+          color: var(--text);
+          background:
+            radial-gradient(circle at 18% 12%, rgba(42, 157, 143, 0.28), transparent 30%),
+            radial-gradient(circle at 78% 16%, rgba(231, 111, 81, 0.22), transparent 32%),
+            linear-gradient(135deg, color-mix(in srgb, var(--vscode-editor-background) 80%, #1f6feb 20%), var(--vscode-editor-background));
+        }
+        .screen {
+          height: 100vh;
+          width: 100vw;
+          padding: clamp(14px, 3vh, 28px) clamp(18px, 4vw, 54px);
+          display: grid;
+          grid-template-rows: auto 1fr auto;
+          gap: clamp(12px, 2vh, 22px);
+          backdrop-filter: blur(28px) saturate(1.1);
+        }
+        .topbar {
+          display: grid;
+          grid-template-columns: minmax(170px, 1fr) minmax(220px, 360px) auto;
+          align-items: center;
+          gap: 14px;
+          min-height: 46px;
+        }
+        .title {
+          min-width: 0;
+        }
+        h1 {
+          margin: 0;
+          font-size: clamp(28px, 4.8vw, 54px);
+          line-height: 0.95;
+          font-weight: 700;
+          letter-spacing: 0;
+        }
+        .count {
+          margin-top: 8px;
+          color: var(--muted);
+          font-size: 13px;
+        }
+        .search {
+          width: 100%;
+          height: 40px;
+          border-radius: 999px;
+          border: 1px solid color-mix(in srgb, var(--vscode-editorWidget-border, #777) 60%, transparent);
+          background: var(--glass);
+          color: var(--text);
+          outline: none;
+          padding: 0 18px;
+          font-size: 14px;
+          box-shadow: 0 12px 40px rgba(0,0,0,0.14);
+        }
+        .search:focus {
+          border-color: var(--ring);
+          box-shadow: 0 0 0 2px color-mix(in srgb, var(--ring) 28%, transparent), 0 12px 40px rgba(0,0,0,0.14);
+        }
+        .layoutControls {
+          display: flex;
+          align-items: center;
+          justify-content: flex-end;
+          gap: 8px;
+          flex-wrap: wrap;
+        }
+        .control {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          height: 40px;
+          padding: 0 10px;
+          border-radius: 999px;
+          background: var(--glass);
+          border: 1px solid color-mix(in srgb, var(--vscode-editorWidget-border, #777) 60%, transparent);
+          color: var(--muted);
+          font-size: 12px;
+          box-shadow: 0 12px 40px rgba(0,0,0,0.12);
+        }
+        .control input {
+          width: 46px;
+          height: 24px;
+          border: 0;
+          border-radius: 8px;
+          background: color-mix(in srgb, var(--vscode-editor-background) 76%, transparent);
+          color: var(--text);
+          text-align: center;
+          outline: none;
+        }
+        .control input:focus {
+          outline: 1px solid var(--ring);
+        }
+        .app:hover .iconWrap {
+          transform: translateY(-2px);
+        }
+        .apps {
+          align-self: stretch;
+          display: grid;
+          grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
+          grid-auto-rows: var(--cell-size);
+          gap: clamp(10px, 1.8vw, 24px) clamp(8px, 1.6vw, 20px);
+          overflow-y: auto;
+          overflow-x: hidden;
+          padding: 8px 2px 26px;
+          scrollbar-width: thin;
+          min-height: min(calc(var(--visible-rows) * var(--cell-size)), 100%);
+          align-content: start;
+        }
+        .app {
+          border: 0;
+          background: transparent;
+          color: var(--text);
+          min-width: 0;
+          padding: 0;
+          cursor: pointer;
+          display: grid;
+          grid-template-rows: var(--icon-size) auto;
+          justify-items: center;
+          align-items: start;
+          gap: 10px;
+        }
+        .app:focus-visible {
+          outline: none;
+        }
+        .app:focus-visible .label {
+          color: #ffffff;
+          background: var(--focus-color);
+          box-shadow: 0 0 0 2px color-mix(in srgb, var(--focus-color) 38%, transparent), 0 0 18px color-mix(in srgb, var(--focus-color) 72%, transparent);
+          border-radius: 11px;
+          padding: 4px 8px;
+          margin-top: -4px;
+          width: auto;
+          max-width: min(calc(var(--icon-size) + 52px), 100%);
+        }
+        .iconWrap {
+          width: var(--icon-size);
+          height: var(--icon-size);
+          border-radius: 0;
+          background: transparent;
+          border: 0;
+          box-shadow: none;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: transform 0.14s ease;
+        }
+        .icon {
+          width: calc(var(--icon-size) * 0.78);
+          height: calc(var(--icon-size) * 0.78);
+          object-fit: contain;
+          border-radius: 0;
+        }
+        .label {
+          display: block;
+          width: min(calc(var(--icon-size) + 44px), 100%);
+          color: var(--text);
+          text-align: center;
+          font-size: 13px;
+          line-height: 1.22;
+          text-shadow: 0 1px 4px rgba(0,0,0,0.28);
+          overflow-wrap: anywhere;
+        }
+        .empty {
+          align-self: center;
+          justify-self: center;
+          max-width: 460px;
+          padding: 28px;
+          border-radius: 18px;
+          background: var(--glass);
+          text-align: center;
+          color: var(--muted);
+          border: 1px solid color-mix(in srgb, var(--vscode-editorWidget-border, #777) 48%, transparent);
+        }
+        .empty strong {
+          color: var(--text);
+          display: block;
+          margin-bottom: 8px;
+          font-size: 18px;
+        }
+        .dock {
+          justify-self: center;
+          display: flex;
+          gap: 8px;
+          padding: 8px;
+          border-radius: 24px;
+          background: var(--glass);
+          border: 1px solid color-mix(in srgb, var(--vscode-editorWidget-border, #777) 45%, transparent);
+          box-shadow: 0 18px 50px rgba(0,0,0,0.20);
+        }
+        .dock button {
+          border: 1px solid transparent;
+          background: color-mix(in srgb, var(--vscode-editor-background) 42%, transparent);
+          color: var(--text);
+          min-width: 104px;
+          height: 38px;
+          padding: 0 12px;
+          border-radius: 16px;
+          cursor: pointer;
+          font-size: 12px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 7px;
+        }
+        .dock button:hover {
+          background: color-mix(in srgb, var(--vscode-list-hoverBackground) 70%, transparent);
+        }
+        .dock .glyph {
+          font-size: 16px;
+          line-height: 1;
+        }
+        .contextMenu {
+          position: fixed;
+          z-index: 20;
+          min-width: 156px;
+          padding: 6px;
+          border-radius: 12px;
+          background: color-mix(in srgb, var(--vscode-menu-background, var(--vscode-editor-background)) 94%, transparent);
+          border: 1px solid var(--vscode-menu-border, var(--vscode-editorWidget-border, #777));
+          box-shadow: 0 18px 40px rgba(0,0,0,0.28);
+          display: none;
+        }
+        .contextMenu.visible {
+          display: block;
+        }
+        .contextMenu button {
+          width: 100%;
+          border: 0;
+          background: transparent;
+          color: var(--vscode-menu-foreground, var(--text));
+          min-height: 30px;
+          padding: 0 10px;
+          border-radius: 8px;
+          text-align: left;
+          cursor: pointer;
+          font-size: 12px;
+        }
+        .contextMenu button:hover {
+          background: var(--vscode-menu-selectionBackground, var(--vscode-list-hoverBackground));
+          color: var(--vscode-menu-selectionForeground, var(--text));
+        }
+        .contextMenu .danger {
+          color: var(--vscode-errorForeground);
+        }
+        @media (max-width: 720px) {
+          .screen {
+            padding: 18px;
+            gap: 18px;
+          }
+          .topbar {
+            grid-template-columns: 1fr;
+          }
+          .search {
+            grid-column: 1;
+          }
+          .layoutControls {
+            grid-column: 1;
+            justify-content: flex-start;
+          }
+          .apps {
+            grid-template-columns: repeat(auto-fill, minmax(max(72px, var(--icon-size)), 1fr));
+            gap: 16px 12px;
+          }
+        }
+      </style>
+    </head>
+    <body>
+      <main class="screen">
+        <header class="topbar">
+          <div class="title">
+            <h1>Launchpad</h1>
+            <div class="count"><span id="visibleCount">${cards.length}</span> projet${cards.length > 1 ? "s" : ""}</div>
+          </div>
+          <input id="search" class="search" type="search" autocomplete="off" spellcheck="false" placeholder="Rechercher un projet" aria-label="Rechercher un projet" />
+          <div class="layoutControls" aria-label="Réglages Launchpad">
+            <label class="control" title="Nombre de colonnes">Col <input id="columnsInput" type="number" min="3" max="16" step="1" value="${layout.columns}" /></label>
+            <label class="control" title="Nombre de lignes visibles">Lig <input id="rowsInput" type="number" min="2" max="10" step="1" value="${layout.rows}" /></label>
+            <label class="control" title="Taille des pictos">Picto <input id="iconSizeInput" type="number" min="42" max="128" step="2" value="${layout.iconSize}" /></label>
+          </div>
+        </header>
+        ${
+          cards.length
+            ? `<section id="apps" class="apps" aria-label="Projets">${cardsHtml}</section>`
+            : `<section class="empty"><strong>Launchpad vide</strong>Ajoute le workspace courant ou choisis un dossier pour créer ta grille de projets.</section>`
+        }
+        <footer class="dock" aria-label="Actions Launchpad">
+          <button id="dockAddCurrent" type="button" title="Ajouter le workspace courant" aria-label="Ajouter le workspace courant"${currentWorkspace ? "" : " disabled"}><span class="glyph">⌂</span><span>Workspace</span></button>
+          <button id="dockAddFolder" type="button" title="Ajouter un dossier" aria-label="Ajouter un dossier"><span class="glyph">+</span><span>Dossier</span></button>
+          <button id="dockRefresh" type="button" title="Rafraîchir" aria-label="Rafraîchir"><span class="glyph">↻</span><span>Refresh</span></button>
+        </footer>
+      </main>
+      <div id="contextMenu" class="contextMenu" role="menu" aria-hidden="true">
+        <button id="contextOpen" type="button" role="menuitem">Ouvrir</button>
+        <button id="contextReveal" type="button" role="menuitem">Afficher dans Finder</button>
+        <button id="contextRemove" class="danger" type="button" role="menuitem">Retirer du Launchpad</button>
+      </div>
+      <script nonce="${nonce}">
+        const vscode = acquireVsCodeApi();
+        const search = document.getElementById('search');
+        const visibleCount = document.getElementById('visibleCount');
+        const apps = Array.from(document.querySelectorAll('.app'));
+        const appsGrid = document.getElementById('apps');
+        const columnsInput = document.getElementById('columnsInput');
+        const rowsInput = document.getElementById('rowsInput');
+        const iconSizeInput = document.getElementById('iconSizeInput');
+        const contextMenu = document.getElementById('contextMenu');
+        const contextOpen = document.getElementById('contextOpen');
+        const contextReveal = document.getElementById('contextReveal');
+        const contextRemove = document.getElementById('contextRemove');
+        let layoutColumns = ${layout.columns};
+        let layoutRows = ${layout.rows};
+        let iconSize = ${layout.iconSize};
+        let focusedIndex = 0;
+        let layoutSaveTimer = null;
+        let contextPath = null;
+
+        function post(command, payload = {}) {
+          vscode.postMessage({ command, ...payload });
+        }
+
+        function clamp(value, min, max) {
+          const n = Number.parseInt(String(value), 10);
+          if (!Number.isFinite(n)) return min;
+          return Math.min(max, Math.max(min, n));
+        }
+
+        function visibleApps() {
+          return apps.filter((el) => el.style.display !== 'none');
+        }
+
+        function focusApp(index) {
+          const visible = visibleApps();
+          if (!visible.length) return;
+          focusedIndex = Math.min(Math.max(index, 0), visible.length - 1);
+          visible[focusedIndex]?.focus({ preventScroll: false });
+        }
+
+        function applySearch() {
+          const q = search?.value.trim().toLowerCase() || '';
+          let shown = 0;
+          apps.forEach((el) => {
+            const haystack = ((el.dataset.name || '') + ' ' + (el.dataset.path || '').toLowerCase());
+            const match = !q || haystack.includes(q);
+            el.style.display = match ? '' : 'none';
+            if (match) shown += 1;
+          });
+          if (visibleCount) visibleCount.textContent = String(shown);
+          focusedIndex = 0;
+        }
+
+        function typeIntoSearch(value) {
+          if (!search) return;
+          search.value = value;
+          applySearch();
+        }
+
+        function appendToSearch(char) {
+          if (!search) return;
+          search.value = search.value + char;
+          applySearch();
+        }
+
+        function closeContextMenu() {
+          contextPath = null;
+          contextMenu?.classList.remove('visible');
+          contextMenu?.setAttribute('aria-hidden', 'true');
+        }
+
+        function openContextMenu(event, path) {
+          contextPath = path;
+          if (!contextMenu) return;
+          contextMenu.style.left = Math.min(event.clientX, window.innerWidth - 176) + 'px';
+          contextMenu.style.top = Math.min(event.clientY, window.innerHeight - 118) + 'px';
+          contextMenu.classList.add('visible');
+          contextMenu.setAttribute('aria-hidden', 'false');
+        }
+
+        function applyLayout({ save = true } = {}) {
+          layoutColumns = clamp(columnsInput?.value ?? layoutColumns, 3, 16);
+          layoutRows = clamp(rowsInput?.value ?? layoutRows, 2, 10);
+          iconSize = clamp(iconSizeInput?.value ?? iconSize, 42, 128);
+          const cellSize = Math.max(iconSize + 42, 96);
+          document.documentElement.style.setProperty('--cols', String(layoutColumns));
+          document.documentElement.style.setProperty('--visible-rows', String(layoutRows));
+          document.documentElement.style.setProperty('--icon-size', iconSize + 'px');
+          document.documentElement.style.setProperty('--cell-size', cellSize + 'px');
+          if (!save) return;
+          if (layoutSaveTimer) clearTimeout(layoutSaveTimer);
+          layoutSaveTimer = setTimeout(() => {
+            post('layout', {
+              columns: layoutColumns,
+              rows: layoutRows,
+              iconSize
+            });
+          }, 250);
+        }
+
+        function wire(id, command) {
+          document.getElementById(id)?.addEventListener('click', () => post(command));
+        }
+
+        wire('dockAddCurrent', 'addCurrent');
+        wire('dockAddFolder', 'addFolder');
+        wire('dockRefresh', 'refresh');
+
+        contextOpen?.addEventListener('click', () => {
+          if (contextPath) post('open', { path: contextPath });
+          closeContextMenu();
+        });
+        contextReveal?.addEventListener('click', () => {
+          if (contextPath) post('reveal', { path: contextPath });
+          closeContextMenu();
+        });
+        contextRemove?.addEventListener('click', () => {
+          if (contextPath) post('removePath', { path: contextPath });
+          closeContextMenu();
+        });
+        window.addEventListener('click', (e) => {
+          if (!contextMenu?.contains(e.target)) closeContextMenu();
+        });
+
+        [columnsInput, rowsInput, iconSizeInput].forEach((input) => {
+          input?.addEventListener('input', () => applyLayout());
+          input?.addEventListener('change', () => applyLayout());
+        });
+
+        apps.forEach((el) => {
+          el.addEventListener('click', () => post('open', { path: el.dataset.path }));
+          el.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            openContextMenu(e, el.dataset.path);
+          });
+        });
+
+        search?.addEventListener('input', () => {
+          applySearch();
+          if (visibleApps().length && document.activeElement !== search) {
+            focusApp(0);
+          }
+        });
+
+        window.addEventListener('keydown', (e) => {
+          const target = e.target;
+          const isSearch = target === search;
+          const isInput = target?.tagName === 'INPUT' && !isSearch;
+          if (e.key === 'Escape') {
+            if (contextPath) {
+              closeContextMenu();
+            } else if (search?.value) {
+              typeIntoSearch('');
+            } else {
+              post('close');
+            }
+          }
+          if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f') {
+            e.preventDefault();
+            search?.focus();
+          }
+          if (!isSearch && !isInput && !e.metaKey && !e.ctrlKey && !e.altKey && e.key.length === 1) {
+            e.preventDefault();
+            closeContextMenu();
+            appendToSearch(e.key);
+            focusApp(0);
+            return;
+          }
+          if (!isSearch && !isInput && !e.metaKey && !e.ctrlKey && !e.altKey && e.key === 'Backspace' && search?.value) {
+            e.preventDefault();
+            closeContextMenu();
+            typeIntoSearch(search.value.slice(0, -1));
+            focusApp(0);
+            return;
+          }
+          if (isInput || (isSearch && !['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter'].includes(e.key))) {
+            return;
+          }
+          const visible = visibleApps();
+          if (!visible.length) return;
+          const activeVisibleIndex = visible.indexOf(document.activeElement);
+          if (activeVisibleIndex >= 0) {
+            focusedIndex = activeVisibleIndex;
+          }
+          if (e.key === 'ArrowRight') {
+            e.preventDefault();
+            focusApp(focusedIndex + 1);
+          } else if (e.key === 'ArrowLeft') {
+            e.preventDefault();
+            focusApp(focusedIndex - 1);
+          } else if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            focusApp(focusedIndex + layoutColumns);
+          } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            focusApp(focusedIndex - layoutColumns);
+          } else if (e.key === 'Enter' && document.activeElement?.classList?.contains('app')) {
+            e.preventDefault();
+            document.activeElement.click();
+          }
+        });
+
+        applyLayout({ save: false });
+        requestAnimationFrame(() => {
+          if (apps.length) {
+            focusApp(0);
+          } else {
+            search?.focus();
+          }
+        });
+      </script>
+    </body>
+  </html>`;
+}
+
 async function buildProjectNotesHtml(webview: vscode.Webview, initialContent: string, filePath: string): Promise<string> {
   const nonce = getNonce();
 
@@ -1100,6 +1885,98 @@ class LaunchpadWebviewProvider implements vscode.WebviewViewProvider {
       return;
     }
     await this.render(this.currentView);
+  }
+}
+
+class LaunchpadPanel {
+  private panel: vscode.WebviewPanel | undefined;
+
+  constructor(
+    private readonly context: vscode.ExtensionContext,
+    private readonly onDidChangeProjects: () => Promise<void>
+  ) {}
+
+  async open(): Promise<void> {
+    await maximizeEditorAreaForLaunchpad();
+
+    if (this.panel) {
+      this.panel.reveal(vscode.ViewColumn.One);
+      await this.render();
+      return;
+    }
+
+    this.panel = vscode.window.createWebviewPanel(
+      "pkvsconfLaunchpad",
+      "Launchpad",
+      vscode.ViewColumn.One,
+      {
+        enableScripts: true,
+        retainContextWhenHidden: true
+      }
+    );
+
+    this.panel.iconPath = vscode.Uri.joinPath(this.context.extensionUri, "icon.png");
+    this.panel.onDidDispose(() => {
+      this.panel = undefined;
+    });
+
+    this.panel.webview.onDidReceiveMessage(async (message) => {
+      if (!message || typeof message.command !== "string") {
+        return;
+      }
+
+      if (message.command === "open" && typeof message.path === "string") {
+        if (isCurrentWorkspacePath(message.path)) {
+          await recordLaunchpadOpen(message.path);
+          this.panel?.dispose();
+          return;
+        }
+        await openProjectInNewWindow(message.path);
+      } else if (message.command === "reveal" && typeof message.path === "string") {
+        await revealProjectInFinder({ name: path.basename(message.path), path: message.path });
+      } else if (message.command === "addCurrent") {
+        await addCurrentWorkspaceToLaunchpad();
+        await this.onDidChangeProjects();
+        await this.render();
+      } else if (message.command === "addFolder") {
+        await addFolderToLaunchpad();
+        await this.onDidChangeProjects();
+        await this.render();
+      } else if (message.command === "remove") {
+        await removeProjectFromLaunchpad();
+        await this.onDidChangeProjects();
+        await this.render();
+      } else if (message.command === "removePath" && typeof message.path === "string") {
+        await removeProjectFromLaunchpadByPath(message.path);
+        await this.onDidChangeProjects();
+        await this.render();
+      } else if (message.command === "refresh") {
+        await this.render();
+      } else if (message.command === "layout") {
+        await setLaunchpadLayoutSettings({
+          columns: typeof message.columns === "number" ? message.columns : undefined,
+          rows: typeof message.rows === "number" ? message.rows : undefined,
+          iconSize: typeof message.iconSize === "number" ? message.iconSize : undefined
+        });
+      } else if (message.command === "close") {
+        this.panel?.dispose();
+      }
+    });
+
+    await this.render();
+  }
+
+  async render(): Promise<void> {
+    if (!this.panel) {
+      return;
+    }
+
+    const projects = getSortedLaunchpadProjects();
+    this.panel.webview.html = await buildLaunchpadPanelHtml(this.panel.webview, projects);
+  }
+
+  async refresh(): Promise<void> {
+    await this.render();
   }
 }
 
@@ -2782,6 +3659,9 @@ export function activate(context: vscode.ExtensionContext) {
     context.extensionUri
   );
   const launchpadProvider = new LaunchpadWebviewProvider(context);
+  const launchpadPanel = new LaunchpadPanel(context, async () => {
+    await launchpadProvider.refreshCurrentView();
+  });
   const notesProvider = new ProjectNotesViewProvider();
   const agentHistoryProvider = new AgentHistoryProvider(context);
 
@@ -2900,12 +3780,21 @@ export function activate(context: vscode.ExtensionContext) {
   skillsSymlinkItem.command = "pkvsconf.createSkillsSymlink";
   skillsSymlinkItem.show();
 
-  const launchpadItem = vscode.window.createStatusBarItem(
+  const launchpadListItem = vscode.window.createStatusBarItem(
     vscode.StatusBarAlignment.Left,
     95
   );
+  launchpadListItem.text = "$(list-unordered) Projets";
+  launchpadListItem.tooltip = "Ouvrir l'ancienne liste du Launchpad";
+  launchpadListItem.command = "pkvsconf.launchpadOpenList";
+  launchpadListItem.show();
+
+  const launchpadItem = vscode.window.createStatusBarItem(
+    vscode.StatusBarAlignment.Left,
+    94
+  );
   launchpadItem.text = "$(rocket) Launchpad";
-  launchpadItem.tooltip = "Ouvrir le Launchpad projets";
+  launchpadItem.tooltip = "Ouvrir le Launchpad projets en plein écran";
   launchpadItem.command = "pkvsconf.launchpadOpen";
   launchpadItem.show();
 
@@ -3124,6 +4013,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   async function refreshLaunchpadViews() {
     await launchpadProvider.refreshCurrentView();
+    await launchpadPanel.refresh();
   }
 
   const launchpadOpenCmd = vscode.commands.registerCommand(
@@ -3133,6 +4023,13 @@ export function activate(context: vscode.ExtensionContext) {
         await openProjectInNewWindow(project.path);
         return;
       }
+      await launchpadPanel.open();
+    }
+  );
+
+  const launchpadOpenListCmd = vscode.commands.registerCommand(
+    "pkvsconf.launchpadOpenList",
+    async () => {
       await openLaunchpadQuickPick();
     }
   );
