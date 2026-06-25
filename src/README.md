@@ -68,6 +68,10 @@ npm run release
 
 ## 🧾 Release Notes
 
+### 2.9.1
+
+- 📂 Le clic sur `Root size` dans la status bar ouvre maintenant le dossier racine du workspace dans Finder.
+
 ### 2.9.0
 
 - 🎛️ Ajout d'un choix de thème Launchpad `Sleek` / `Classique`, sauvegardé dans les réglages.

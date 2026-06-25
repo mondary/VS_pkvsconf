@@ -2,7 +2,7 @@
   "name": "vs-pkvsconf",
   "displayName": "VS_pkvsconf",
   "description": "Adds a toolbar button in Explorer to reveal the active file in Finder.",
-  "version": "2.9.0",
+  "version": "2.9.1",
   "publisher": "Cmondary",
   "icon": "icon.png",
   "license": "MIT",
@@ -19,6 +19,7 @@
   "activationEvents": [
     "onCommand:revealInFinderButton.revealActive",
     "onCommand:revealInFinderButton.refreshRootSize",
+    "onCommand:revealInFinderButton.openRootFolderInFinder",
     "onCommand:revealInFinderButton.openGitHubRepo",
     "onCommand:pkvsconf.addTagToExtension",
     "onCommand:pkvsconf.codexCaptureResume",
@@ -153,6 +154,11 @@
         "command": "revealInFinderButton.refreshRootSize",
         "title": "Refresh Root Folder Size",
         "icon": "$(database)"
+      },
+      {
+        "command": "revealInFinderButton.openRootFolderInFinder",
+        "title": "Open Root Folder in Finder",
+        "icon": "$(folder-opened)"
       },
       {
         "command": "revealInFinderButton.openGitHubRepo",

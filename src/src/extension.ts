@@ -4252,8 +4252,8 @@ export function activate(context: vscode.ExtensionContext) {
     100
   );
   rootSizeItem.text = "Root size: --";
-  rootSizeItem.tooltip = "Click to refresh root folder size";
-  rootSizeItem.command = "revealInFinderButton.refreshRootSize";
+  rootSizeItem.tooltip = "Click to open the root folder in Finder";
+  rootSizeItem.command = "revealInFinderButton.openRootFolderInFinder";
   rootSizeItem.backgroundColor = new vscode.ThemeColor(
     "statusBarItem.warningBackground"
   );
@@ -4491,23 +4491,43 @@ export function activate(context: vscode.ExtensionContext) {
 
     rootSizeInProgress = true;
     rootSizeItem.text = "Root size: calculating...";
-    rootSizeItem.tooltip = `Root: ${workspaceUri.fsPath}`;
+    rootSizeItem.tooltip = `Click to open in Finder\nRoot: ${workspaceUri.fsPath}`;
 
     try {
       const result = await getDirectorySizeBytes(workspaceUri.fsPath);
       const formatted = formatBytes(result.total);
       rootSizeItem.text = `Root size: ${formatted}`;
       if (result.hadError) {
-        rootSizeItem.tooltip = `Root: ${workspaceUri.fsPath}\nSome folders could not be read.`;
+        rootSizeItem.tooltip = `Click to open in Finder\nRoot: ${workspaceUri.fsPath}\nSome folders could not be read.`;
+      } else {
+        rootSizeItem.tooltip = `Click to open in Finder\nRoot: ${workspaceUri.fsPath}`;
       }
     } finally {
       rootSizeInProgress = false;
     }
   };
 
+  const openRootFolderInFinder = async () => {
+    const workspaceUri = vscode.workspace.workspaceFolders?.[0]?.uri;
+    if (!workspaceUri) {
+      vscode.window.showWarningMessage("Aucun workspace ouvert.");
+      return;
+    }
+    if (workspaceUri.scheme !== "file") {
+      vscode.window.showWarningMessage("Ouverture Finder indisponible pour ce workspace distant ou virtuel.");
+      return;
+    }
+    await vscode.env.openExternal(workspaceUri);
+  };
+
   const refreshCmd = vscode.commands.registerCommand(
     "revealInFinderButton.refreshRootSize",
     refreshRootSize
+  );
+
+  const openRootFolderCmd = vscode.commands.registerCommand(
+    "revealInFinderButton.openRootFolderInFinder",
+    openRootFolderInFinder
   );
 
   const manageCategoryCmd = vscode.commands.registerCommand(
@@ -5505,6 +5525,8 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.workspace.onDidChangeWorkspaceFolders(() => {
       void refreshRootSize();
     }),
+    refreshCmd,
+    openRootFolderCmd,
     terminalSplitRightCmd,
     terminalNewTabCmd,
     terminalSplitBottomCmd
