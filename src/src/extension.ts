@@ -22,7 +22,8 @@ const LAUNCHPAD_LAYOUT_DEFAULTS = {
   columns: 8,
   rows: 4,
   iconSize: 76,
-  focusColor: "#008CFF"
+  focusColor: "#008CFF",
+  theme: "sleek"
 } as const;
 
 type AgentProviderId = "codex" | "claude" | "gemini" | "opencode" | "unknown";
@@ -392,6 +393,7 @@ type LaunchpadLayoutSettings = {
   rows: number;
   iconSize: number;
   focusColor: string;
+  theme: "classic" | "sleek";
 };
 
 type LaunchpadQuickPickItem = vscode.QuickPickItem & {
@@ -495,7 +497,8 @@ function getLaunchpadLayoutSettings(): LaunchpadLayoutSettings {
     focusColor: normalizeCssHexColor(
       cfg.get<string>("launchpad.focusColor") ?? LAUNCHPAD_LAYOUT_DEFAULTS.focusColor,
       LAUNCHPAD_LAYOUT_DEFAULTS.focusColor
-    )
+    ),
+    theme: getLaunchpadTheme()
   };
 }
 
@@ -517,6 +520,14 @@ async function setLaunchpadLayoutSettings(settings: Partial<LaunchpadLayoutSetti
       vscode.ConfigurationTarget.Global
     );
   }
+  if (settings.theme === "classic" || settings.theme === "sleek") {
+    await cfg.update("launchpad.theme", settings.theme, vscode.ConfigurationTarget.Global);
+  }
+}
+
+function getLaunchpadTheme(): LaunchpadLayoutSettings["theme"] {
+  const value = vscode.workspace.getConfiguration("pkvsconf").get<string>("launchpad.theme");
+  return value === "classic" ? "classic" : "sleek";
 }
 
 function clampNumber(value: number, min: number, max: number): number {
@@ -1172,7 +1183,7 @@ async function buildLaunchpadPanelHtml(
   const nonce = getNonce();
   const currentWorkspace = getWorkspaceRootFsPath();
   const layout = getLaunchpadLayoutSettings();
-  const cellSize = Math.max(layout.iconSize + 42, 96);
+  const cellSize = Math.max(layout.iconSize + 94, 136);
 
   const cardsHtml = cards
     .map((c, index) => {
@@ -1184,8 +1195,25 @@ async function buildLaunchpadPanelHtml(
             <img class="icon" src="${escapeAttr(c.icon)}" alt="${escapeAttr(c.name)}" />
           </span>
           <span class="label">${escapeHtml(c.name || initials)}</span>
+          ${c.lastOpened ? '<span class="lastOpened">recent</span>' : ""}
         </button>`;
     })
+    .join("");
+  const shortcuts = [
+    ["Ouvrir Launchpad", "pkvsconf.launchpadOpen", "Cmd+Alt+L"],
+    ["Ancienne liste projets", "pkvsconf.launchpadOpenList", "Cmd+Alt+P"],
+    ["Ajouter workspace", "pkvsconf.launchpadAddCurrent", "Cmd+Alt+Shift+C"],
+    ["Ajouter dossier", "pkvsconf.launchpadAddFolder", "Cmd+Alt+Shift+F"],
+    ["Afficher dans Finder", "pkvsconf.launchpadRevealInFinder", "Cmd+Alt+Shift+R"],
+    ["Retirer un projet", "pkvsconf.launchpadRemove", "Cmd+Alt+Shift+Backspace"]
+  ];
+  const shortcutsHtml = shortcuts
+    .map(([label, command, defaultShortcut]) => `
+            <div class="shortcutRow">
+              <span class="shortcutLabel">${escapeHtml(label)}</span>
+              <code>${escapeHtml(defaultShortcut)}</code>
+              <button class="smallAction shortcutConfig" type="button" data-command="${escapeAttr(command)}">Configurer</button>
+            </div>`)
     .join("");
 
   return `<!DOCTYPE html>
@@ -1202,11 +1230,18 @@ async function buildLaunchpadPanelHtml(
           --icon-size: ${layout.iconSize}px;
           --cell-size: ${cellSize}px;
           --focus-color: ${layout.focusColor};
-          --glass: color-mix(in srgb, var(--vscode-editor-background) 58%, transparent);
-          --glass-strong: color-mix(in srgb, var(--vscode-editor-background) 78%, transparent);
-          --text: var(--vscode-foreground);
-          --muted: var(--vscode-descriptionForeground);
-          --ring: var(--vscode-focusBorder);
+          --bg: #08080a;
+          --panel: rgba(255, 255, 255, 0.035);
+          --panel-strong: rgba(255, 255, 255, 0.07);
+          --panel-border: rgba(255, 255, 255, 0.09);
+          --panel-border-strong: rgba(255, 255, 255, 0.16);
+          --text: #f4f6fb;
+          --muted: rgba(244, 246, 251, 0.62);
+          --accent: #6366f1;
+          --cyan: #06b6d4;
+          --rose: #ec4899;
+          --shadow: rgba(0, 0, 0, 0.32);
+          --ring: var(--focus-color);
         }
         * { box-sizing: border-box; }
         html, body {
@@ -1219,26 +1254,52 @@ async function buildLaunchpadPanelHtml(
           overflow: hidden;
           font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
           color: var(--text);
+          background: var(--bg);
+        }
+        body::before {
+          content: "";
+          position: fixed;
+          inset: -20%;
+          z-index: -2;
+          pointer-events: none;
           background:
-            radial-gradient(circle at 18% 12%, rgba(42, 157, 143, 0.28), transparent 30%),
-            radial-gradient(circle at 78% 16%, rgba(231, 111, 81, 0.22), transparent 32%),
-            linear-gradient(135deg, color-mix(in srgb, var(--vscode-editor-background) 80%, #1f6feb 20%), var(--vscode-editor-background));
+            linear-gradient(115deg, rgba(99, 102, 241, 0.20), transparent 24%),
+            linear-gradient(245deg, rgba(6, 182, 212, 0.16), transparent 28%),
+            linear-gradient(20deg, rgba(236, 72, 153, 0.12), transparent 22%),
+            #08080a;
+          animation: ambientShift 24s ease-in-out infinite alternate;
+        }
+        body::after {
+          content: "";
+          position: fixed;
+          inset: 0;
+          z-index: -1;
+          pointer-events: none;
+          background:
+            linear-gradient(rgba(255,255,255,0.028) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(255,255,255,0.022) 1px, transparent 1px);
+          background-size: 44px 44px;
+          mask-image: linear-gradient(to bottom, rgba(0,0,0,0.28), rgba(0,0,0,0.08) 45%, transparent);
+        }
+        @keyframes ambientShift {
+          from { transform: translate3d(-2%, -1%, 0) scale(1); filter: saturate(1); }
+          to { transform: translate3d(2%, 1%, 0) scale(1.04); filter: saturate(1.18); }
         }
         .screen {
           height: 100vh;
           width: 100vw;
-          padding: clamp(14px, 3vh, 28px) clamp(18px, 4vw, 54px);
+          padding: clamp(18px, 4vh, 42px) clamp(18px, 5vw, 72px);
           display: grid;
           grid-template-rows: auto 1fr auto;
-          gap: clamp(12px, 2vh, 22px);
-          backdrop-filter: blur(28px) saturate(1.1);
+          gap: clamp(18px, 3vh, 34px);
+          backdrop-filter: blur(18px) saturate(1.12);
         }
         .topbar {
           display: grid;
-          grid-template-columns: minmax(170px, 1fr) minmax(220px, 360px) auto;
+          grid-template-columns: minmax(170px, 1fr) minmax(240px, 620px) minmax(170px, 1fr);
           align-items: center;
           gap: 14px;
-          min-height: 46px;
+          min-height: 58px;
         }
         .title {
           min-width: 0;
@@ -1255,96 +1316,121 @@ async function buildLaunchpadPanelHtml(
           color: var(--muted);
           font-size: 13px;
         }
+        .searchWrap {
+          position: relative;
+          width: 100%;
+        }
+        .searchWrap::before {
+          content: "";
+          position: absolute;
+          left: 20px;
+          top: 50%;
+          width: 15px;
+          height: 15px;
+          border: 2px solid var(--muted);
+          border-radius: 50%;
+          transform: translateY(-56%);
+          pointer-events: none;
+        }
+        .searchWrap::after {
+          content: "";
+          position: absolute;
+          left: 33px;
+          top: 50%;
+          width: 8px;
+          height: 2px;
+          border-radius: 2px;
+          background: var(--muted);
+          transform: translateY(5px) rotate(45deg);
+          pointer-events: none;
+        }
         .search {
           width: 100%;
-          height: 40px;
+          height: 52px;
           border-radius: 999px;
-          border: 1px solid color-mix(in srgb, var(--vscode-editorWidget-border, #777) 60%, transparent);
-          background: var(--glass);
+          border: 1px solid var(--panel-border);
+          background: rgba(255, 255, 255, 0.04);
           color: var(--text);
           outline: none;
-          padding: 0 18px;
-          font-size: 14px;
-          box-shadow: 0 12px 40px rgba(0,0,0,0.14);
+          padding: 0 54px 0 54px;
+          font-size: 15px;
+          box-shadow: 0 18px 48px rgba(0,0,0,0.24);
+          backdrop-filter: blur(18px);
+          transition: border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+        }
+        .search::placeholder {
+          color: rgba(244, 246, 251, 0.45);
         }
         .search:focus {
-          border-color: var(--ring);
-          box-shadow: 0 0 0 2px color-mix(in srgb, var(--ring) 28%, transparent), 0 12px 40px rgba(0,0,0,0.14);
+          border-color: color-mix(in srgb, var(--focus-color) 54%, transparent);
+          background: rgba(255, 255, 255, 0.07);
+          box-shadow: 0 0 0 2px color-mix(in srgb, var(--focus-color) 22%, transparent), 0 18px 48px rgba(0,0,0,0.24);
         }
-        .layoutControls {
-          display: flex;
-          align-items: center;
-          justify-content: flex-end;
-          gap: 8px;
-          flex-wrap: wrap;
-        }
-        .control {
+        .shortcutHint {
+          position: absolute;
+          right: 18px;
+          top: 50%;
+          transform: translateY(-50%);
+          min-width: 22px;
+          height: 22px;
+          padding: 0 7px;
+          border-radius: 7px;
           display: inline-flex;
           align-items: center;
-          gap: 6px;
-          height: 40px;
-          padding: 0 10px;
-          border-radius: 999px;
-          background: var(--glass);
-          border: 1px solid color-mix(in srgb, var(--vscode-editorWidget-border, #777) 60%, transparent);
+          justify-content: center;
+          border: 1px solid rgba(255,255,255,0.11);
+          background: rgba(255,255,255,0.06);
           color: var(--muted);
           font-size: 12px;
-          box-shadow: 0 12px 40px rgba(0,0,0,0.12);
-        }
-        .control input {
-          width: 46px;
-          height: 24px;
-          border: 0;
-          border-radius: 8px;
-          background: color-mix(in srgb, var(--vscode-editor-background) 76%, transparent);
-          color: var(--text);
-          text-align: center;
-          outline: none;
-        }
-        .control input:focus {
-          outline: 1px solid var(--ring);
-        }
-        .app:hover .iconWrap {
-          transform: translateY(-2px);
+          pointer-events: none;
         }
         .apps {
           align-self: stretch;
           display: grid;
           grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
           grid-auto-rows: var(--cell-size);
-          gap: clamp(10px, 1.8vw, 24px) clamp(8px, 1.6vw, 20px);
+          gap: clamp(14px, 2vw, 26px);
           overflow-y: auto;
           overflow-x: hidden;
-          padding: 8px 2px 26px;
+          padding: 6px 4px 30px;
           scrollbar-width: thin;
           min-height: min(calc(var(--visible-rows) * var(--cell-size)), 100%);
           align-content: start;
         }
         .app {
-          border: 0;
-          background: transparent;
+          position: relative;
+          border: 1px solid var(--panel-border);
+          background: var(--panel);
           color: var(--text);
           min-width: 0;
-          padding: 0;
+          padding: 18px 14px 14px;
+          border-radius: 20px;
           cursor: pointer;
           display: grid;
-          grid-template-rows: var(--icon-size) auto;
+          grid-template-rows: var(--icon-size) auto auto;
           justify-items: center;
-          align-items: start;
+          align-items: center;
           gap: 10px;
+          backdrop-filter: blur(14px);
+          box-shadow: 0 14px 34px rgba(0,0,0,0.12);
+          transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+        }
+        .app:hover {
+          background: var(--panel-strong);
+          border-color: var(--panel-border-strong);
+          transform: translateY(-6px) scale(1.02);
+          box-shadow: 0 22px 42px rgba(0,0,0,0.24), 0 0 24px rgba(255,255,255,0.025);
+        }
+        .app:active {
+          transform: translateY(-1px) scale(0.99);
         }
         .app:focus-visible {
           outline: none;
+          border-color: color-mix(in srgb, var(--focus-color) 72%, transparent);
+          box-shadow: 0 0 0 2px color-mix(in srgb, var(--focus-color) 30%, transparent), 0 0 26px color-mix(in srgb, var(--focus-color) 46%, transparent), 0 22px 42px rgba(0,0,0,0.24);
         }
         .app:focus-visible .label {
           color: #ffffff;
-          background: var(--focus-color);
-          box-shadow: 0 0 0 2px color-mix(in srgb, var(--focus-color) 38%, transparent), 0 0 18px color-mix(in srgb, var(--focus-color) 72%, transparent);
-          border-radius: 11px;
-          padding: 4px 8px;
-          margin-top: -4px;
-          width: auto;
-          max-width: min(calc(var(--icon-size) + 52px), 100%);
         }
         .iconWrap {
           width: var(--icon-size);
@@ -1356,34 +1442,47 @@ async function buildLaunchpadPanelHtml(
           display: flex;
           align-items: center;
           justify-content: center;
-          transition: transform 0.14s ease;
+          transition: transform 0.18s ease, filter 0.18s ease;
+        }
+        .app:hover .iconWrap,
+        .app:focus-visible .iconWrap {
+          transform: translateY(-2px);
+          filter: drop-shadow(0 12px 18px rgba(0,0,0,0.28));
         }
         .icon {
-          width: calc(var(--icon-size) * 0.78);
-          height: calc(var(--icon-size) * 0.78);
+          width: calc(var(--icon-size) * 0.82);
+          height: calc(var(--icon-size) * 0.82);
           object-fit: contain;
           border-radius: 0;
         }
         .label {
           display: block;
-          width: min(calc(var(--icon-size) + 44px), 100%);
+          width: 100%;
           color: var(--text);
           text-align: center;
           font-size: 13px;
+          font-weight: 550;
           line-height: 1.22;
           text-shadow: 0 1px 4px rgba(0,0,0,0.28);
           overflow-wrap: anywhere;
+        }
+        .lastOpened {
+          color: var(--muted);
+          font-size: 10px;
+          text-transform: uppercase;
+          letter-spacing: 0.9px;
         }
         .empty {
           align-self: center;
           justify-self: center;
           max-width: 460px;
           padding: 28px;
-          border-radius: 18px;
-          background: var(--glass);
+          border-radius: 20px;
+          background: var(--panel);
           text-align: center;
           color: var(--muted);
-          border: 1px solid color-mix(in srgb, var(--vscode-editorWidget-border, #777) 48%, transparent);
+          border: 1px solid var(--panel-border);
+          backdrop-filter: blur(14px);
         }
         .empty strong {
           color: var(--text);
@@ -1396,43 +1495,223 @@ async function buildLaunchpadPanelHtml(
           display: flex;
           gap: 8px;
           padding: 8px;
-          border-radius: 24px;
-          background: var(--glass);
-          border: 1px solid color-mix(in srgb, var(--vscode-editorWidget-border, #777) 45%, transparent);
-          box-shadow: 0 18px 50px rgba(0,0,0,0.20);
+          border-radius: 999px;
+          background: rgba(25, 25, 30, 0.72);
+          border: 1px solid var(--panel-border);
+          box-shadow: 0 18px 50px rgba(0,0,0,0.34);
+          backdrop-filter: blur(18px);
         }
         .dock button {
-          border: 1px solid transparent;
-          background: color-mix(in srgb, var(--vscode-editor-background) 42%, transparent);
+          border: 1px solid rgba(255,255,255,0.06);
+          background: rgba(255, 255, 255, 0.045);
           color: var(--text);
-          min-width: 104px;
-          height: 38px;
-          padding: 0 12px;
-          border-radius: 16px;
+          min-width: 48px;
+          height: 48px;
+          padding: 0 15px;
+          border-radius: 999px;
           cursor: pointer;
           font-size: 12px;
           display: inline-flex;
           align-items: center;
           justify-content: center;
           gap: 7px;
+          transition: transform 0.18s ease, background 0.18s ease, border-color 0.18s ease;
         }
         .dock button:hover {
-          background: color-mix(in srgb, var(--vscode-list-hoverBackground) 70%, transparent);
+          background: rgba(255, 255, 255, 0.10);
+          border-color: var(--panel-border-strong);
+          transform: translateY(-3px);
+        }
+        .dock button:disabled {
+          opacity: 0.46;
+          cursor: not-allowed;
+          transform: none;
         }
         .dock .glyph {
           font-size: 16px;
           line-height: 1;
         }
+        .modalOverlay {
+          position: fixed;
+          inset: 0;
+          z-index: 30;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 18px;
+          background: rgba(0, 0, 0, 0.52);
+          backdrop-filter: blur(10px);
+          opacity: 0;
+          pointer-events: none;
+          transition: opacity 0.18s ease;
+        }
+        .modalOverlay.visible {
+          opacity: 1;
+          pointer-events: auto;
+        }
+        .modal {
+          width: min(460px, 100%);
+          max-height: min(760px, calc(100vh - 36px));
+          overflow-y: auto;
+          border-radius: 24px;
+          border: 1px solid var(--panel-border);
+          background: rgba(18, 18, 23, 0.95);
+          box-shadow: 0 24px 70px rgba(0,0,0,0.48);
+          padding: 26px;
+          transform: translateY(14px) scale(0.98);
+          transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        .modalOverlay.visible .modal {
+          transform: translateY(0) scale(1);
+        }
+        .modalHeader {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 12px;
+          margin-bottom: 22px;
+        }
+        .modalTitle {
+          margin: 0;
+          font-size: 20px;
+          font-weight: 650;
+        }
+        .modalSection {
+          margin: 22px 0 0;
+          padding-top: 18px;
+          border-top: 1px solid rgba(255,255,255,0.08);
+        }
+        .modalSectionTitle {
+          margin: 0 0 14px;
+          color: var(--text);
+          font-size: 13px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.7px;
+        }
+        .modalClose {
+          border: 0;
+          width: 34px;
+          height: 34px;
+          border-radius: 50%;
+          background: rgba(255,255,255,0.06);
+          color: var(--muted);
+          cursor: pointer;
+          font-size: 22px;
+          line-height: 1;
+        }
+        .modalClose:hover {
+          color: var(--text);
+          background: rgba(255,255,255,0.1);
+        }
+        .formGroup {
+          margin-bottom: 20px;
+        }
+        .formLabel {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          color: var(--muted);
+          font-size: 13px;
+          margin-bottom: 8px;
+        }
+        .formValue {
+          color: var(--focus-color);
+          font-weight: 700;
+        }
+        .range {
+          width: 100%;
+          accent-color: var(--focus-color);
+        }
+        .colorInput {
+          width: 100%;
+          height: 38px;
+          border-radius: 12px;
+          border: 1px solid var(--panel-border);
+          background: rgba(255,255,255,0.06);
+          color: var(--text);
+          padding: 0 12px;
+          outline: none;
+        }
+        .colorInput:focus {
+          border-color: color-mix(in srgb, var(--focus-color) 54%, transparent);
+          box-shadow: 0 0 0 2px color-mix(in srgb, var(--focus-color) 22%, transparent);
+        }
+        .formSelect {
+          width: 100%;
+          height: 38px;
+          border-radius: 12px;
+          border: 1px solid var(--panel-border);
+          background: rgba(255,255,255,0.06);
+          color: var(--text);
+          padding: 0 12px;
+          outline: none;
+        }
+        .formSelect:focus {
+          border-color: color-mix(in srgb, var(--focus-color) 54%, transparent);
+          box-shadow: 0 0 0 2px color-mix(in srgb, var(--focus-color) 22%, transparent);
+        }
+        .settingsActions {
+          display: flex;
+          gap: 8px;
+          flex-wrap: wrap;
+        }
+        .smallAction {
+          border: 1px solid rgba(255,255,255,0.10);
+          background: rgba(255,255,255,0.06);
+          color: var(--text);
+          min-height: 32px;
+          border-radius: 10px;
+          padding: 0 10px;
+          cursor: pointer;
+          font-size: 12px;
+        }
+        .smallAction:hover {
+          background: rgba(255,255,255,0.11);
+          border-color: rgba(255,255,255,0.18);
+        }
+        .shortcutList {
+          display: grid;
+          gap: 8px;
+        }
+        .shortcutRow {
+          display: grid;
+          grid-template-columns: minmax(120px, 1fr) auto auto;
+          align-items: center;
+          gap: 8px;
+          min-height: 38px;
+          padding: 6px 8px;
+          border-radius: 12px;
+          background: rgba(255,255,255,0.035);
+          border: 1px solid rgba(255,255,255,0.06);
+        }
+        .shortcutLabel {
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          color: var(--text);
+          font-size: 12px;
+        }
+        .shortcutRow code {
+          color: var(--muted);
+          font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+          font-size: 11px;
+          background: rgba(0,0,0,0.18);
+          border-radius: 7px;
+          padding: 4px 6px;
+        }
         .contextMenu {
           position: fixed;
-          z-index: 20;
+          z-index: 40;
           min-width: 156px;
           padding: 6px;
-          border-radius: 12px;
-          background: color-mix(in srgb, var(--vscode-menu-background, var(--vscode-editor-background)) 94%, transparent);
-          border: 1px solid var(--vscode-menu-border, var(--vscode-editorWidget-border, #777));
+          border-radius: 14px;
+          background: rgba(18, 18, 23, 0.96);
+          border: 1px solid var(--panel-border);
           box-shadow: 0 18px 40px rgba(0,0,0,0.28);
           display: none;
+          backdrop-filter: blur(14px);
         }
         .contextMenu.visible {
           display: block;
@@ -1441,7 +1720,7 @@ async function buildLaunchpadPanelHtml(
           width: 100%;
           border: 0;
           background: transparent;
-          color: var(--vscode-menu-foreground, var(--text));
+          color: var(--text);
           min-height: 30px;
           padding: 0 10px;
           border-radius: 8px;
@@ -1450,11 +1729,125 @@ async function buildLaunchpadPanelHtml(
           font-size: 12px;
         }
         .contextMenu button:hover {
-          background: var(--vscode-menu-selectionBackground, var(--vscode-list-hoverBackground));
-          color: var(--vscode-menu-selectionForeground, var(--text));
+          background: rgba(255,255,255,0.09);
+          color: var(--text);
         }
         .contextMenu .danger {
           color: var(--vscode-errorForeground);
+        }
+        body.theme-classic {
+          color: var(--vscode-foreground);
+          background:
+            radial-gradient(circle at 18% 12%, rgba(42, 157, 143, 0.28), transparent 30%),
+            radial-gradient(circle at 78% 16%, rgba(231, 111, 81, 0.22), transparent 32%),
+            linear-gradient(135deg, color-mix(in srgb, var(--vscode-editor-background) 80%, #1f6feb 20%), var(--vscode-editor-background));
+        }
+        body.theme-classic::before,
+        body.theme-classic::after {
+          display: none;
+        }
+        body.theme-classic .screen {
+          padding: clamp(14px, 3vh, 28px) clamp(18px, 4vw, 54px);
+          gap: clamp(12px, 2vh, 22px);
+          backdrop-filter: blur(28px) saturate(1.1);
+        }
+        body.theme-classic .topbar {
+          grid-template-columns: minmax(170px, 1fr) minmax(220px, 360px) minmax(170px, 1fr);
+          min-height: 46px;
+        }
+        body.theme-classic .search {
+          height: 40px;
+          border: 1px solid color-mix(in srgb, var(--vscode-editorWidget-border, #777) 60%, transparent);
+          background: color-mix(in srgb, var(--vscode-editor-background) 58%, transparent);
+          color: var(--vscode-foreground);
+          padding: 0 42px;
+          font-size: 14px;
+          box-shadow: 0 12px 40px rgba(0,0,0,0.14);
+          backdrop-filter: none;
+        }
+        body.theme-classic .search:focus {
+          border-color: var(--vscode-focusBorder);
+          box-shadow: 0 0 0 2px color-mix(in srgb, var(--vscode-focusBorder) 28%, transparent), 0 12px 40px rgba(0,0,0,0.14);
+        }
+        body.theme-classic .apps {
+          gap: clamp(10px, 1.8vw, 24px) clamp(8px, 1.6vw, 20px);
+          padding: 8px 2px 26px;
+        }
+        body.theme-classic .app {
+          border: 0;
+          background: transparent;
+          box-shadow: none;
+          padding: 0;
+          border-radius: 0;
+          grid-template-rows: var(--icon-size) auto auto;
+          align-items: start;
+          backdrop-filter: none;
+          transform: none;
+        }
+        body.theme-classic .app:hover {
+          background: transparent;
+          border-color: transparent;
+          box-shadow: none;
+          transform: none;
+        }
+        body.theme-classic .app:hover .iconWrap,
+        body.theme-classic .app:focus-visible .iconWrap {
+          transform: translateY(-2px);
+          filter: none;
+        }
+        body.theme-classic .app:focus-visible {
+          border-color: transparent;
+          box-shadow: none;
+        }
+        body.theme-classic .app:focus-visible .label {
+          color: #ffffff;
+          background: var(--focus-color);
+          box-shadow: 0 0 0 2px color-mix(in srgb, var(--focus-color) 38%, transparent), 0 0 18px color-mix(in srgb, var(--focus-color) 72%, transparent);
+          border-radius: 11px;
+          padding: 4px 8px;
+          margin-top: -4px;
+          width: auto;
+          max-width: min(calc(var(--icon-size) + 52px), 100%);
+        }
+        body.theme-classic .icon {
+          width: calc(var(--icon-size) * 0.78);
+          height: calc(var(--icon-size) * 0.78);
+        }
+        body.theme-classic .label {
+          width: min(calc(var(--icon-size) + 44px), 100%);
+          color: var(--vscode-foreground);
+          font-weight: 400;
+        }
+        body.theme-classic .lastOpened {
+          color: var(--vscode-descriptionForeground);
+        }
+        body.theme-classic .dock {
+          border-radius: 24px;
+          background: color-mix(in srgb, var(--vscode-editor-background) 58%, transparent);
+          border: 1px solid color-mix(in srgb, var(--vscode-editorWidget-border, #777) 45%, transparent);
+          box-shadow: 0 18px 50px rgba(0,0,0,0.20);
+        }
+        body.theme-classic .dock button {
+          height: 38px;
+          min-width: 104px;
+          padding: 0 12px;
+          border-radius: 16px;
+          background: color-mix(in srgb, var(--vscode-editor-background) 42%, transparent);
+        }
+        body.theme-classic .modal {
+          border-radius: 18px;
+          background: color-mix(in srgb, var(--vscode-editor-background) 92%, transparent);
+        }
+        body.theme-classic .shortcutRow,
+        body.theme-classic .smallAction,
+        body.theme-classic .formSelect,
+        body.theme-classic .colorInput {
+          background: color-mix(in srgb, var(--vscode-editor-background) 74%, transparent);
+          border-color: color-mix(in srgb, var(--vscode-editorWidget-border, #777) 48%, transparent);
+        }
+        body.theme-classic .contextMenu {
+          background: color-mix(in srgb, var(--vscode-menu-background, var(--vscode-editor-background)) 94%, transparent);
+          border: 1px solid var(--vscode-menu-border, var(--vscode-editorWidget-border, #777));
         }
         @media (max-width: 720px) {
           .screen {
@@ -1464,33 +1857,34 @@ async function buildLaunchpadPanelHtml(
           .topbar {
             grid-template-columns: 1fr;
           }
-          .search {
+          .searchWrap {
             grid-column: 1;
-          }
-          .layoutControls {
-            grid-column: 1;
-            justify-content: flex-start;
           }
           .apps {
             grid-template-columns: repeat(auto-fill, minmax(max(72px, var(--icon-size)), 1fr));
             gap: 16px 12px;
           }
+          .dock span:not(.glyph) {
+            display: none;
+          }
+          .shortcutRow {
+            grid-template-columns: 1fr;
+          }
         }
       </style>
     </head>
-    <body>
+    <body class="theme-${layout.theme}">
       <main class="screen">
         <header class="topbar">
           <div class="title">
             <h1>Launchpad</h1>
             <div class="count"><span id="visibleCount">${cards.length}</span> projet${cards.length > 1 ? "s" : ""}</div>
           </div>
-          <input id="search" class="search" type="search" autocomplete="off" spellcheck="false" placeholder="Rechercher un projet" aria-label="Rechercher un projet" />
-          <div class="layoutControls" aria-label="Réglages Launchpad">
-            <label class="control" title="Nombre de colonnes">Col <input id="columnsInput" type="number" min="3" max="16" step="1" value="${layout.columns}" /></label>
-            <label class="control" title="Nombre de lignes visibles">Lig <input id="rowsInput" type="number" min="2" max="10" step="1" value="${layout.rows}" /></label>
-            <label class="control" title="Taille des pictos">Picto <input id="iconSizeInput" type="number" min="42" max="128" step="2" value="${layout.iconSize}" /></label>
+          <div class="searchWrap">
+            <input id="search" class="search" type="search" autocomplete="off" spellcheck="false" placeholder="Rechercher un projet" aria-label="Rechercher un projet" />
+            <span class="shortcutHint">/</span>
           </div>
+          <div aria-hidden="true"></div>
         </header>
         ${
           cards.length
@@ -1498,11 +1892,59 @@ async function buildLaunchpadPanelHtml(
             : `<section class="empty"><strong>Launchpad vide</strong>Ajoute le workspace courant ou choisis un dossier pour créer ta grille de projets.</section>`
         }
         <footer class="dock" aria-label="Actions Launchpad">
+          <button id="dockSettings" type="button" title="Réglages d'affichage" aria-label="Réglages d'affichage"><span class="glyph">⚙</span><span>Réglages</span></button>
           <button id="dockAddCurrent" type="button" title="Ajouter le workspace courant" aria-label="Ajouter le workspace courant"${currentWorkspace ? "" : " disabled"}><span class="glyph">⌂</span><span>Workspace</span></button>
           <button id="dockAddFolder" type="button" title="Ajouter un dossier" aria-label="Ajouter un dossier"><span class="glyph">+</span><span>Dossier</span></button>
           <button id="dockRefresh" type="button" title="Rafraîchir" aria-label="Rafraîchir"><span class="glyph">↻</span><span>Refresh</span></button>
         </footer>
       </main>
+      <div id="settingsModal" class="modalOverlay" aria-hidden="true">
+        <section class="modal" role="dialog" aria-modal="true" aria-label="Réglages Launchpad">
+          <div class="modalHeader">
+            <h2 class="modalTitle">Préférences Launchpad</h2>
+            <button id="settingsClose" class="modalClose" type="button" aria-label="Fermer">×</button>
+          </div>
+          <div class="modalSection">
+            <h3 class="modalSectionTitle">Apparence</h3>
+          <div class="formGroup">
+            <label class="formLabel" for="themeInput"><span>Thème</span><span id="themeValue" class="formValue">${layout.theme === "classic" ? "Classique" : "Sleek"}</span></label>
+            <select id="themeInput" class="formSelect">
+              <option value="sleek"${layout.theme === "sleek" ? " selected" : ""}>Sleek</option>
+              <option value="classic"${layout.theme === "classic" ? " selected" : ""}>Classique</option>
+            </select>
+          </div>
+          <div class="formGroup">
+            <label class="formLabel" for="columnsInput"><span>Colonnes</span><span id="columnsValue" class="formValue">${layout.columns}</span></label>
+            <input id="columnsInput" class="range" type="range" min="3" max="16" step="1" value="${layout.columns}" />
+          </div>
+          <div class="formGroup">
+            <label class="formLabel" for="rowsInput"><span>Lignes visibles</span><span id="rowsValue" class="formValue">${layout.rows}</span></label>
+            <input id="rowsInput" class="range" type="range" min="2" max="10" step="1" value="${layout.rows}" />
+          </div>
+          <div class="formGroup">
+            <label class="formLabel" for="iconSizeInput"><span>Taille des pictos</span><span id="iconSizeValue" class="formValue">${layout.iconSize}px</span></label>
+            <input id="iconSizeInput" class="range" type="range" min="42" max="128" step="2" value="${layout.iconSize}" />
+          </div>
+          <div class="formGroup">
+            <label class="formLabel" for="focusColorInput"><span>Couleur du focus</span><span id="focusColorValue" class="formValue">${layout.focusColor}</span></label>
+            <input id="focusColorInput" class="colorInput" type="text" spellcheck="false" value="${layout.focusColor}" placeholder="#008CFF" />
+          </div>
+          </div>
+          <div class="modalSection">
+            <h3 class="modalSectionTitle">Options extension</h3>
+            <div class="settingsActions">
+              <button id="openLaunchpadSettings" class="smallAction" type="button">Ouvrir les réglages PK VS Conf</button>
+              <button id="openKeyboardSettings" class="smallAction" type="button">Ouvrir les raccourcis VS Code</button>
+            </div>
+          </div>
+          <div class="modalSection">
+            <h3 class="modalSectionTitle">Raccourcis Launchpad</h3>
+            <div class="shortcutList">
+${shortcutsHtml}
+            </div>
+          </div>
+        </section>
+      </div>
       <div id="contextMenu" class="contextMenu" role="menu" aria-hidden="true">
         <button id="contextOpen" type="button" role="menuitem">Ouvrir</button>
         <button id="contextReveal" type="button" role="menuitem">Afficher dans Finder</button>
@@ -1517,6 +1959,15 @@ async function buildLaunchpadPanelHtml(
         const columnsInput = document.getElementById('columnsInput');
         const rowsInput = document.getElementById('rowsInput');
         const iconSizeInput = document.getElementById('iconSizeInput');
+        const themeInput = document.getElementById('themeInput');
+        const focusColorInput = document.getElementById('focusColorInput');
+        const columnsValue = document.getElementById('columnsValue');
+        const rowsValue = document.getElementById('rowsValue');
+        const iconSizeValue = document.getElementById('iconSizeValue');
+        const themeValue = document.getElementById('themeValue');
+        const focusColorValue = document.getElementById('focusColorValue');
+        const settingsModal = document.getElementById('settingsModal');
+        const settingsClose = document.getElementById('settingsClose');
         const contextMenu = document.getElementById('contextMenu');
         const contextOpen = document.getElementById('contextOpen');
         const contextReveal = document.getElementById('contextReveal');
@@ -1524,6 +1975,8 @@ async function buildLaunchpadPanelHtml(
         let layoutColumns = ${layout.columns};
         let layoutRows = ${layout.rows};
         let iconSize = ${layout.iconSize};
+        let theme = '${layout.theme}';
+        let focusColor = '${layout.focusColor}';
         let focusedIndex = 0;
         let layoutSaveTimer = null;
         let contextPath = null;
@@ -1536,6 +1989,15 @@ async function buildLaunchpadPanelHtml(
           const n = Number.parseInt(String(value), 10);
           if (!Number.isFinite(n)) return min;
           return Math.min(max, Math.max(min, n));
+        }
+
+        function normalizeHexColor(value, fallback) {
+          const trimmed = String(value || '').trim();
+          if (/^#[0-9a-fA-F]{6}$/.test(trimmed)) return trimmed;
+          if (/^#[0-9a-fA-F]{3}$/.test(trimmed)) {
+            return '#' + trimmed[1] + trimmed[1] + trimmed[2] + trimmed[2] + trimmed[3] + trimmed[3];
+          }
+          return fallback;
         }
 
         function visibleApps() {
@@ -1589,22 +2051,49 @@ async function buildLaunchpadPanelHtml(
           contextMenu.setAttribute('aria-hidden', 'false');
         }
 
+        function openSettingsModal() {
+          settingsModal?.classList.add('visible');
+          settingsModal?.setAttribute('aria-hidden', 'false');
+        }
+
+        function closeSettingsModal() {
+          settingsModal?.classList.remove('visible');
+          settingsModal?.setAttribute('aria-hidden', 'true');
+        }
+
         function applyLayout({ save = true } = {}) {
           layoutColumns = clamp(columnsInput?.value ?? layoutColumns, 3, 16);
           layoutRows = clamp(rowsInput?.value ?? layoutRows, 2, 10);
           iconSize = clamp(iconSizeInput?.value ?? iconSize, 42, 128);
-          const cellSize = Math.max(iconSize + 42, 96);
+          theme = themeInput?.value === 'classic' ? 'classic' : 'sleek';
+          focusColor = normalizeHexColor(focusColorInput?.value ?? focusColor, focusColor);
+          const cellSize = Math.max(iconSize + 94, 136);
           document.documentElement.style.setProperty('--cols', String(layoutColumns));
           document.documentElement.style.setProperty('--visible-rows', String(layoutRows));
           document.documentElement.style.setProperty('--icon-size', iconSize + 'px');
           document.documentElement.style.setProperty('--cell-size', cellSize + 'px');
+          document.documentElement.style.setProperty('--focus-color', focusColor);
+          document.body.classList.toggle('theme-classic', theme === 'classic');
+          document.body.classList.toggle('theme-sleek', theme === 'sleek');
+          if (columnsInput) columnsInput.value = String(layoutColumns);
+          if (rowsInput) rowsInput.value = String(layoutRows);
+          if (iconSizeInput) iconSizeInput.value = String(iconSize);
+          if (themeInput) themeInput.value = theme;
+          if (focusColorInput) focusColorInput.value = focusColor;
+          if (columnsValue) columnsValue.textContent = String(layoutColumns);
+          if (rowsValue) rowsValue.textContent = String(layoutRows);
+          if (iconSizeValue) iconSizeValue.textContent = iconSize + 'px';
+          if (themeValue) themeValue.textContent = theme === 'classic' ? 'Classique' : 'Sleek';
+          if (focusColorValue) focusColorValue.textContent = focusColor;
           if (!save) return;
           if (layoutSaveTimer) clearTimeout(layoutSaveTimer);
           layoutSaveTimer = setTimeout(() => {
             post('layout', {
               columns: layoutColumns,
               rows: layoutRows,
-              iconSize
+              iconSize,
+              theme,
+              focusColor
             });
           }, 250);
         }
@@ -1613,9 +2102,14 @@ async function buildLaunchpadPanelHtml(
           document.getElementById(id)?.addEventListener('click', () => post(command));
         }
 
+        document.getElementById('dockSettings')?.addEventListener('click', openSettingsModal);
         wire('dockAddCurrent', 'addCurrent');
         wire('dockAddFolder', 'addFolder');
         wire('dockRefresh', 'refresh');
+        settingsClose?.addEventListener('click', closeSettingsModal);
+        settingsModal?.addEventListener('click', (e) => {
+          if (e.target === settingsModal) closeSettingsModal();
+        });
 
         contextOpen?.addEventListener('click', () => {
           if (contextPath) post('open', { path: contextPath });
@@ -1633,9 +2127,21 @@ async function buildLaunchpadPanelHtml(
           if (!contextMenu?.contains(e.target)) closeContextMenu();
         });
 
-        [columnsInput, rowsInput, iconSizeInput].forEach((input) => {
+        [columnsInput, rowsInput, iconSizeInput, themeInput, focusColorInput].forEach((input) => {
           input?.addEventListener('input', () => applyLayout());
           input?.addEventListener('change', () => applyLayout());
+        });
+
+        document.getElementById('openLaunchpadSettings')?.addEventListener('click', () => {
+          post('openSettings');
+        });
+        document.getElementById('openKeyboardSettings')?.addEventListener('click', () => {
+          post('openKeyboardSettings');
+        });
+        document.querySelectorAll('.shortcutConfig').forEach((button) => {
+          button.addEventListener('click', () => {
+            post('configureShortcut', { commandId: button.dataset.command });
+          });
         });
 
         apps.forEach((el) => {
@@ -1660,11 +2166,14 @@ async function buildLaunchpadPanelHtml(
           if (e.key === 'Escape') {
             if (contextPath) {
               closeContextMenu();
+            } else if (settingsModal?.classList.contains('visible')) {
+              closeSettingsModal();
             } else if (search?.value) {
               typeIntoSearch('');
             } else {
               post('close');
             }
+            return;
           }
           if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f') {
             e.preventDefault();
@@ -1956,8 +2465,16 @@ class LaunchpadPanel {
         await setLaunchpadLayoutSettings({
           columns: typeof message.columns === "number" ? message.columns : undefined,
           rows: typeof message.rows === "number" ? message.rows : undefined,
-          iconSize: typeof message.iconSize === "number" ? message.iconSize : undefined
+          iconSize: typeof message.iconSize === "number" ? message.iconSize : undefined,
+          focusColor: typeof message.focusColor === "string" ? message.focusColor : undefined,
+          theme: message.theme === "classic" || message.theme === "sleek" ? message.theme : undefined
         });
+      } else if (message.command === "openSettings") {
+        await vscode.commands.executeCommand("workbench.action.openSettings", "pkvsconf.launchpad");
+      } else if (message.command === "openKeyboardSettings") {
+        await vscode.commands.executeCommand("workbench.action.openGlobalKeybindings", "pkvsconf.launchpad");
+      } else if (message.command === "configureShortcut" && typeof message.commandId === "string") {
+        await vscode.commands.executeCommand("workbench.action.openGlobalKeybindings", `@command:${message.commandId}`);
       } else if (message.command === "close") {
         this.panel?.dispose();
       }

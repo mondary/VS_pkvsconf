@@ -2,7 +2,7 @@
   "name": "vs-pkvsconf",
   "displayName": "VS_pkvsconf",
   "description": "Adds a toolbar button in Explorer to reveal the active file in Finder.",
-  "version": "2.8.0",
+  "version": "2.9.0",
   "publisher": "Cmondary",
   "icon": "icon.png",
   "license": "MIT",
@@ -125,6 +125,15 @@
           "minimum": 42,
           "maximum": 128,
           "description": "Taille des pictogrammes dans la vue Launchpad plein écran."
+        },
+        "pkvsconf.launchpad.theme": {
+          "type": "string",
+          "default": "sleek",
+          "enum": [
+            "sleek",
+            "classic"
+          ],
+          "description": "Thème de la vue Launchpad plein écran."
         },
         "pkvsconf.launchpad.focusColor": {
           "type": "string",

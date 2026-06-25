@@ -68,6 +68,16 @@ npm run release
 
 ## 🧾 Release Notes
 
+### 2.9.0
+
+- 🎛️ Ajout d'un choix de thème Launchpad `Sleek` / `Classique`, sauvegardé dans les réglages.
+- ⚙️ L'écran de préférences du Launchpad centralise thème, grille, couleur de focus, accès aux réglages VS Code et configuration des raccourcis.
+
+### 2.8.1
+
+- 🎨 Nouveau thème Launchpad inspiré de `launchpad1.html` : fond sombre animé, cartes glass, recherche en pilule et dock flottant.
+- 🎛️ Réglages colonnes/lignes/pictos déplacés dans une modale accessible depuis le dock.
+
 ### 2.8.0
 
 - 🎯 Focus clavier Launchpad plus visible en bleu électrique, configurable via `pkvsconf.launchpad.focusColor`.
