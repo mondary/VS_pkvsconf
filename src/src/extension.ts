@@ -5180,6 +5180,46 @@ export function activate(context: vscode.ExtensionContext) {
       }
     }
   );
+
+  const openInDefaultBrowserCmd = vscode.commands.registerCommand(
+    "pkvsconf.openInDefaultBrowser",
+    async (uri?: vscode.Uri) => {
+      const targetUri = uri || vscode.window.activeTextEditor?.document.uri;
+
+      if (!targetUri) {
+        vscode.window.showInformationMessage(
+          "Aucun fichier ouvert pour ouvrir dans le navigateur."
+        );
+        return;
+      }
+
+      const filePath = targetUri.fsPath;
+
+      if (process.platform === "darwin") {
+        cp.exec(`open -a "Google Chrome" "${filePath}"`, (err) => {
+          if (err) {
+            cp.exec(`open -a "Chromium" "${filePath}"`, (err2) => {
+              if (err2) {
+                vscode.env.openExternal(targetUri);
+              }
+            });
+          }
+        });
+      } else if (process.platform === "win32") {
+        cp.exec(`start chrome "${filePath}"`, { shell: "cmd" }, (err) => {
+          if (err) {
+            vscode.env.openExternal(targetUri);
+          }
+        });
+      } else {
+        cp.exec(`google-chrome "${filePath}" || chromium "${filePath}"`, (err) => {
+          if (err) {
+            vscode.env.openExternal(targetUri);
+          }
+        });
+      }
+    }
+  );
   
   function findAvailablePort(startPort: number, endPort: number): Promise<number | null> {
     return new Promise((resolve) => {
@@ -5527,6 +5567,8 @@ export function activate(context: vscode.ExtensionContext) {
     }),
     refreshCmd,
     openRootFolderCmd,
+    previewActivePageCmd,
+    openInDefaultBrowserCmd,
     terminalSplitRightCmd,
     terminalNewTabCmd,
     terminalSplitBottomCmd

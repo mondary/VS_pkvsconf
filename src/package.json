@@ -2,7 +2,7 @@
   "name": "vs-pkvsconf",
   "displayName": "VS_pkvsconf",
   "description": "Adds a toolbar button in Explorer to reveal the active file in Finder.",
-  "version": "2.9.1",
+  "version": "2.11.0",
   "publisher": "Cmondary",
   "icon": "icon.png",
   "license": "MIT",
@@ -47,6 +47,7 @@
     "onCommand:pkvsconf.agentHistoryAddFromClipboard",
     "onCommand:pkvsconf.agentHistoryRun",
     "onCommand:pkvsconf.agentHistoryClear",
+    "onCommand:pkvsconf.openInDefaultBrowser",
     "onView:projectNotesView",
     "onView:projectIconView",
     "onView:extensionTagsView",
@@ -72,23 +73,6 @@
         }
       ]
     },
-    "commands": [
-      {
-        "command": "pkvsconf.terminalSplitRight",
-        "title": "Terminal: Split Right (PK)",
-        "category": "PK VS Conf"
-      },
-      {
-        "command": "pkvsconf.terminalSplitBottom",
-        "title": "Terminal: Split Bottom (PK)",
-        "category": "PK VS Conf"
-      },
-      {
-        "command": "pkvsconf.terminalNewTab",
-        "title": "Terminal: New Tab (PK)",
-        "category": "PK VS Conf"
-      }
-    ],
     "configuration": {
       "title": "PK VS Conf",
       "properties": {
@@ -145,6 +129,21 @@
       }
     },
     "commands": [
+      {
+        "command": "pkvsconf.terminalSplitRight",
+        "title": "Terminal: Split Right (PK)",
+        "category": "PK VS Conf"
+      },
+      {
+        "command": "pkvsconf.terminalSplitBottom",
+        "title": "Terminal: Split Bottom (PK)",
+        "category": "PK VS Conf"
+      },
+      {
+        "command": "pkvsconf.terminalNewTab",
+        "title": "Terminal: New Tab (PK)",
+        "category": "PK VS Conf"
+      },
       {
         "command": "revealInFinderButton.revealActive",
         "title": "Reveal Active File in Finder",
@@ -279,6 +278,11 @@
         "command": "pkvsconf.agentHistoryClear",
         "title": "Agent History: Vider l'historique",
         "icon": "$(trash)"
+      },
+      {
+        "command": "pkvsconf.openInDefaultBrowser",
+        "title": "Ouvrir avec Chrome",
+        "icon": "$(browser)"
       }
     ],
     "colors": [
@@ -361,6 +365,10 @@
         },
         {
           "command": "pkvsconf.createSkillsSymlink"
+        },
+        {
+          "command": "pkvsconf.openInDefaultBrowser",
+          "when": "resourceExtname =~ /\\.html?$/"
         }
       ],
       "extension/context": [
@@ -368,6 +376,20 @@
           "command": "pkvsconf.addTagToExtension",
           "when": "extensionIsInstalled",
           "group": "navigation@1"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "pkvsconf.openInDefaultBrowser",
+          "when": "resourceExtname =~ /\\.html?$/",
+          "group": "navigation@2"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "pkvsconf.openInDefaultBrowser",
+          "when": "resourceExtname =~ /\\.html?$/",
+          "group": "navigation@2"
         }
       ],
       "scm/title": [
@@ -482,6 +504,18 @@
         "command": "pkvsconf.launchpadRemove",
         "key": "ctrl+alt+shift+backspace",
         "mac": "cmd+alt+shift+backspace"
+      },
+      {
+        "command": "pkvsconf.openInDefaultBrowser",
+        "key": "cmd+enter",
+        "mac": "cmd+enter",
+        "when": "editorTextFocus && resourceExtname =~ /\\.html?$/"
+      },
+      {
+        "command": "pkvsconf.openInDefaultBrowser",
+        "key": "cmd+enter",
+        "mac": "cmd+enter",
+        "when": "listFocus && resourceExtname =~ /\\.html?$/"
       }
     ]
   },
