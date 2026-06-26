@@ -2,7 +2,7 @@
   "name": "vs-pkvsconf",
   "displayName": "VS_pkvsconf",
   "description": "Adds a toolbar button in Explorer to reveal the active file in Finder.",
-  "version": "2.11.0",
+  "version": "2.12.1",
   "publisher": "Cmondary",
   "icon": "icon.png",
   "license": "MIT",
@@ -125,6 +125,23 @@
           "default": "#008CFF",
           "pattern": "^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$",
           "description": "Couleur du focus clavier dans la vue Launchpad plein écran."
+        },
+        "pkvsconf.launchpad.restorePanels": {
+          "type": "string",
+          "default": "none",
+          "enum": [
+            "none",
+            "left",
+            "right",
+            "both"
+          ],
+          "enumDescriptions": [
+            "Laisser les volets fermés",
+            "Ouvrir le volet gauche",
+            "Ouvrir le volet droit",
+            "Ouvrir les deux volets"
+          ],
+          "description": "Volets à restaurer après la fermeture du Launchpad plein écran."
         }
       }
     },

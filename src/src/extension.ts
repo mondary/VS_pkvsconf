@@ -394,6 +394,7 @@ type LaunchpadLayoutSettings = {
   iconSize: number;
   focusColor: string;
   theme: "classic" | "sleek";
+  restorePanels: "none" | "left" | "right" | "both";
 };
 
 type LaunchpadQuickPickItem = vscode.QuickPickItem & {
@@ -498,7 +499,8 @@ function getLaunchpadLayoutSettings(): LaunchpadLayoutSettings {
       cfg.get<string>("launchpad.focusColor") ?? LAUNCHPAD_LAYOUT_DEFAULTS.focusColor,
       LAUNCHPAD_LAYOUT_DEFAULTS.focusColor
     ),
-    theme: getLaunchpadTheme()
+    theme: getLaunchpadTheme(),
+    restorePanels: getLaunchpadRestorePanels()
   };
 }
 
@@ -522,6 +524,9 @@ async function setLaunchpadLayoutSettings(settings: Partial<LaunchpadLayoutSetti
   }
   if (settings.theme === "classic" || settings.theme === "sleek") {
     await cfg.update("launchpad.theme", settings.theme, vscode.ConfigurationTarget.Global);
+  }
+  if (settings.restorePanels === "none" || settings.restorePanels === "left" || settings.restorePanels === "right" || settings.restorePanels === "both") {
+    await cfg.update("launchpad.restorePanels", settings.restorePanels, vscode.ConfigurationTarget.Global);
   }
 }
 
@@ -689,6 +694,35 @@ async function maximizeEditorAreaForLaunchpad(): Promise<void> {
       await vscode.commands.executeCommand(command);
     } catch {
       // Some commands are unavailable in older VS Code versions or inactive layouts.
+    }
+  }
+}
+
+function getLaunchpadRestorePanels(): "none" | "left" | "right" | "both" {
+  const value = vscode.workspace.getConfiguration("pkvsconf").get<string>("launchpad.restorePanels");
+  if (value === "left" || value === "right" || value === "both") return value;
+  return "none";
+}
+
+async function restorePanelsAfterLaunchpad(): Promise<void> {
+  const restore = getLaunchpadRestorePanels();
+  if (restore === "none") return;
+
+  await new Promise((resolve) => setTimeout(resolve, 150));
+
+  if (restore === "left" || restore === "both") {
+    try {
+      await vscode.commands.executeCommand("workbench.view.explorer");
+    } catch {
+      // ignore
+    }
+  }
+
+  if (restore === "right" || restore === "both") {
+    try {
+      await vscode.commands.executeCommand("workbench.action.toggleAuxiliaryBar");
+    } catch {
+      // ignore
     }
   }
 }
@@ -1931,6 +1965,18 @@ async function buildLaunchpadPanelHtml(
           </div>
           </div>
           <div class="modalSection">
+            <h3 class="modalSectionTitle">Comportement</h3>
+          <div class="formGroup">
+            <label class="formLabel" for="restorePanelsInput"><span>Volets après fermeture</span><span id="restorePanelsValue" class="formValue">${layout.restorePanels === "both" ? "Les deux" : layout.restorePanels === "left" ? "Gauche" : layout.restorePanels === "right" ? "Droit" : "Fermés"}</span></label>
+            <select id="restorePanelsInput" class="formSelect">
+              <option value="none"${layout.restorePanels === "none" ? " selected" : ""}>Fermés</option>
+              <option value="left"${layout.restorePanels === "left" ? " selected" : ""}>Volet gauche</option>
+              <option value="right"${layout.restorePanels === "right" ? " selected" : ""}>Volet droit</option>
+              <option value="both"${layout.restorePanels === "both" ? " selected" : ""}>Les deux volets</option>
+            </select>
+          </div>
+          </div>
+          <div class="modalSection">
             <h3 class="modalSectionTitle">Options extension</h3>
             <div class="settingsActions">
               <button id="openLaunchpadSettings" class="smallAction" type="button">Ouvrir les réglages PK VS Conf</button>
@@ -1961,11 +2007,13 @@ ${shortcutsHtml}
         const iconSizeInput = document.getElementById('iconSizeInput');
         const themeInput = document.getElementById('themeInput');
         const focusColorInput = document.getElementById('focusColorInput');
+        const restorePanelsInput = document.getElementById('restorePanelsInput');
         const columnsValue = document.getElementById('columnsValue');
         const rowsValue = document.getElementById('rowsValue');
         const iconSizeValue = document.getElementById('iconSizeValue');
         const themeValue = document.getElementById('themeValue');
         const focusColorValue = document.getElementById('focusColorValue');
+        const restorePanelsValue = document.getElementById('restorePanelsValue');
         const settingsModal = document.getElementById('settingsModal');
         const settingsClose = document.getElementById('settingsClose');
         const contextMenu = document.getElementById('contextMenu');
@@ -1977,6 +2025,7 @@ ${shortcutsHtml}
         let iconSize = ${layout.iconSize};
         let theme = '${layout.theme}';
         let focusColor = '${layout.focusColor}';
+        let restorePanels = '${layout.restorePanels}';
         let focusedIndex = 0;
         let layoutSaveTimer = null;
         let contextPath = null;
@@ -2067,6 +2116,7 @@ ${shortcutsHtml}
           iconSize = clamp(iconSizeInput?.value ?? iconSize, 42, 128);
           theme = themeInput?.value === 'classic' ? 'classic' : 'sleek';
           focusColor = normalizeHexColor(focusColorInput?.value ?? focusColor, focusColor);
+          restorePanels = ['none','left','right','both'].includes(restorePanelsInput?.value) ? restorePanelsInput.value : 'none';
           const cellSize = Math.max(iconSize + 94, 136);
           document.documentElement.style.setProperty('--cols', String(layoutColumns));
           document.documentElement.style.setProperty('--visible-rows', String(layoutRows));
@@ -2085,6 +2135,8 @@ ${shortcutsHtml}
           if (iconSizeValue) iconSizeValue.textContent = iconSize + 'px';
           if (themeValue) themeValue.textContent = theme === 'classic' ? 'Classique' : 'Sleek';
           if (focusColorValue) focusColorValue.textContent = focusColor;
+          if (restorePanelsInput) restorePanelsInput.value = restorePanels;
+          if (restorePanelsValue) restorePanelsValue.textContent = restorePanels === 'both' ? 'Les deux' : restorePanels === 'left' ? 'Gauche' : restorePanels === 'right' ? 'Droit' : 'Fermés';
           if (!save) return;
           if (layoutSaveTimer) clearTimeout(layoutSaveTimer);
           layoutSaveTimer = setTimeout(() => {
@@ -2093,7 +2145,8 @@ ${shortcutsHtml}
               rows: layoutRows,
               iconSize,
               theme,
-              focusColor
+              focusColor,
+              restorePanels
             });
           }, 250);
         }
@@ -2127,7 +2180,7 @@ ${shortcutsHtml}
           if (!contextMenu?.contains(e.target)) closeContextMenu();
         });
 
-        [columnsInput, rowsInput, iconSizeInput, themeInput, focusColorInput].forEach((input) => {
+        [columnsInput, rowsInput, iconSizeInput, themeInput, focusColorInput, restorePanelsInput].forEach((input) => {
           input?.addEventListener('input', () => applyLayout());
           input?.addEventListener('change', () => applyLayout());
         });
@@ -2427,6 +2480,7 @@ class LaunchpadPanel {
     this.panel.iconPath = vscode.Uri.joinPath(this.context.extensionUri, "icon.png");
     this.panel.onDidDispose(() => {
       this.panel = undefined;
+      restorePanelsAfterLaunchpad();
     });
 
     this.panel.webview.onDidReceiveMessage(async (message) => {
@@ -2467,7 +2521,8 @@ class LaunchpadPanel {
           rows: typeof message.rows === "number" ? message.rows : undefined,
           iconSize: typeof message.iconSize === "number" ? message.iconSize : undefined,
           focusColor: typeof message.focusColor === "string" ? message.focusColor : undefined,
-          theme: message.theme === "classic" || message.theme === "sleek" ? message.theme : undefined
+          theme: message.theme === "classic" || message.theme === "sleek" ? message.theme : undefined,
+          restorePanels: message.restorePanels === "none" || message.restorePanels === "left" || message.restorePanels === "right" || message.restorePanels === "both" ? message.restorePanels : undefined
         });
       } else if (message.command === "openSettings") {
         await vscode.commands.executeCommand("workbench.action.openSettings", "pkvsconf.launchpad");
