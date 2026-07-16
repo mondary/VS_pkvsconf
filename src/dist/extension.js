@@ -8,6 +8,7 @@ const path = require("path");
 const cp = require("child_process");
 const net = require("net");
 const os = require("os");
+const kanban_1 = require("./kanban");
 const SIZE_UNITS = ["KB", "MB", "GB", "TB"];
 const ICON_PREFIX = "icon.";
 const VIEW_ID = "projectIconView";
@@ -3661,6 +3662,7 @@ async function getGitHubRepoUrlFromRoot(workspaceRoot) {
     return undefined;
 }
 function activate(context) {
+    (0, kanban_1.registerKanban)(context);
     const provider = new ProjectIconViewProvider();
     let watcher;
     const tagsStore = new ExtensionTagsStore(context);
@@ -3715,34 +3717,34 @@ function activate(context) {
     rootSizeItem.command = "revealInFinderButton.openRootFolderInFinder";
     rootSizeItem.backgroundColor = new vscode.ThemeColor("statusBarItem.warningBackground");
     rootSizeItem.show();
-    const previewItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 99);
+    const previewItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 98);
     previewItem.text = "$(open-preview) Preview";
     previewItem.tooltip = "Lancer une preview de la page en cours";
     previewItem.command = "pkvsconf.previewActivePage";
     previewItem.show();
-    const titlebarColorItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 98);
+    const titlebarColorItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 97);
     titlebarColorItem.text = "$(symbol-color) Title Bar";
     titlebarColorItem.tooltip = "Changer la couleur de la barre de titre (aléatoire)";
     titlebarColorItem.command = "pkvsconf.regenerateWorkspaceTitlebarColor";
     titlebarColorItem.show();
     // Secrets Detection Status Bar Item
-    const secretsItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 97);
+    const secretsItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 96);
     secretsItem.text = "$(shield) Secrets: --";
     secretsItem.tooltip = "Détection des secrets exposés";
     secretsItem.command = "pkvsconf.showExposedSecrets";
     secretsItem.show();
     // Agent Skills Status Bar Item
-    const skillsSymlinkItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 96);
+    const skillsSymlinkItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 95);
     skillsSymlinkItem.text = "$(link) Agent Skills";
     skillsSymlinkItem.tooltip = "Créer un lien symbolique .agent vers le dossier -agent";
     skillsSymlinkItem.command = "pkvsconf.createSkillsSymlink";
     skillsSymlinkItem.show();
-    const launchpadListItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 95);
+    const launchpadListItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 94);
     launchpadListItem.text = "$(list-unordered) Projets";
     launchpadListItem.tooltip = "Ouvrir l'ancienne liste du Launchpad";
     launchpadListItem.command = "pkvsconf.launchpadOpenList";
     launchpadListItem.show();
-    const launchpadItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 94);
+    const launchpadItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 93);
     launchpadItem.text = "$(rocket) Launchpad";
     launchpadItem.tooltip = "Ouvrir le Launchpad projets en plein écran";
     launchpadItem.command = "pkvsconf.launchpadOpen";
@@ -3983,12 +3985,17 @@ function activate(context) {
             vscode.window.showInformationMessage("Reveal in Finder is only available on macOS.");
             return;
         }
-        const activeEditorUri = vscode.window.activeTextEditor?.document.uri;
-        const activeTabUri = vscode.window.tabGroups.activeTabGroup.activeTab?.input?.uri;
-        let uri = activeEditorUri ?? activeTabUri;
+        let uri = vscode.window.activeTextEditor?.document.uri;
         if (!uri) {
-            // If there's no active editor (e.g. focus is in Explorer), prefer the Git repo root(s)
-            // because workspace root can be a parent folder (like ~/Documents/GitHub).
+            for (const group of vscode.window.tabGroups.all) {
+                const tabUri = group.activeTab?.input?.uri;
+                if (tabUri) {
+                    uri = tabUri;
+                    break;
+                }
+            }
+        }
+        if (!uri) {
             const repos = await getGitRepoRootsFromGitApi();
             if (repos.length === 1) {
                 uri = repos[0].rootUri;
@@ -3999,12 +4006,12 @@ function activate(context) {
             }
         }
         if (!uri) {
-            const workspaceFolders = vscode.workspace.workspaceFolders ?? [];
-            if (workspaceFolders.length === 1) {
-                uri = workspaceFolders[0].uri;
+            const folders = vscode.workspace.workspaceFolders;
+            if (folders?.length === 1) {
+                uri = folders[0].uri;
             }
-            else if (workspaceFolders.length > 1) {
-                const pick = await vscode.window.showQuickPick(workspaceFolders.map((f) => ({ label: f.name, description: f.uri.fsPath, folder: f })), { placeHolder: "Reveal which workspace folder?" });
+            else if (folders && folders.length > 1) {
+                const pick = await vscode.window.showQuickPick(folders.map((f) => ({ label: f.name, description: f.uri.fsPath, folder: f })), { placeHolder: "Reveal which workspace folder?" });
                 uri = pick?.folder.uri;
             }
         }
@@ -4668,13 +4675,20 @@ function activate(context) {
         await vscode.commands.executeCommand("workbench.action.terminal.split");
     });
     const terminalNewTabCmd = vscode.commands.registerCommand("pkvsconf.terminalNewTab", async () => {
-        await vscode.commands.executeCommand("workbench.action.createTerminalEditor");
+        await vscode.commands.executeCommand("workbench.action.terminal.new");
+        await vscode.commands.executeCommand("workbench.action.terminal.moveToEditor");
     });
     const terminalSplitBottomCmd = vscode.commands.registerCommand("pkvsconf.terminalSplitBottom", async () => {
         // VS Code can't split a *single* terminal buffer vertically like tmux.
         // Crée un terminal dans un panneau en dessous
         await vscode.commands.executeCommand("workbench.action.terminal.newInActiveGroup");
     });
+    const statusBarTerm = vscode.window.createStatusBarItem("pkvsconf.statusBarTerm", vscode.StatusBarAlignment.Left, 99);
+    statusBarTerm.text = "$(terminal) Term";
+    statusBarTerm.tooltip = "Open Terminal in New Editor Tab";
+    statusBarTerm.command = "pkvsconf.terminalNewTab";
+    statusBarTerm.show();
+    context.subscriptions.push(statusBarTerm);
     void refreshRootSize();
     const refreshIntervalMs = 5 * 60 * 1000;
     const refreshInterval = setInterval(() => {

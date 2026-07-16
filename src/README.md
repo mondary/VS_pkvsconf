@@ -18,6 +18,7 @@
 - 🔐 Detection des secrets exposes
 - 🛡️ Blocage de commit avec secrets
 - 🚀 Launchpad projets (vue plein écran type macOS Launchpad + bascule rapide)
+- 📋 Kanban TUI avec cartes Backlog, In Progress, In Review et Done
 - 🔗 Agent Skills : symlink `.agent` vers le dossier central `-agent`
 ## 🧠 Utilisation
 
@@ -31,10 +32,16 @@
 - Secrets : scan workspace + blocage de commit si secrets staged.
 - Agent Skills : cree un lien symbolique `.agent` vers le dossier central `-agent`.
 - Launchpad : bouton `Projets` pour l'ancienne liste rapide, bouton `Launchpad` pour une grille plein écran avec recherche, navigation aux flèches, réglages lignes/colonnes/taille, ajout, suppression et ouverture en nouvelle fenêtre. Raccourci `Cmd/Ctrl+Alt+L`.
+- Kanban : bouton `Kanban` dans la barre de status. Chaque carte active lance ou reprend une session OpenCode dans `tmux`; le passage en Done conserve l'historique et ferme la session.
 
 ## ⚙️ Reglages
 
-Aucun reglage dedie. Les couleurs de la status bar utilisent :
+Le Kanban utilise :
+
+- `pkvsconf.kanban.agentCommand` : commande d'agent, par défaut `opencode --prompt {prompt}`.
+- `pkvsconf.kanban.tmuxCommand` : exécutable tmux, par défaut `tmux`.
+
+Les couleurs de la status bar utilisent :
 
 - `pkvsconf.rootSizeStatusBarItem.background`
 - `pkvsconf.rootSizeStatusBarItem.foreground`
@@ -52,6 +59,7 @@ Aucun reglage dedie. Les couleurs de la status bar utilisent :
 - Rescanner les secrets
 - Commit (verification secrets)
 - Agent Skills
+- Ouvrir le Kanban des agents
 
 ## 📦 Build & Package
 
@@ -63,10 +71,16 @@ npm run release
 ## 🧪 Installation (Antigravity)
 
 - Palette de commandes : "Extensions: Install from VSIX..."
-- Selectionner `release/vs-pkvsconf-2.2.0.vsix`
+- Selectionner `release/vs-pkvsconf-2.13.0.vsix`
 - Recharger la fenetre
 
 ## 🧾 Release Notes
+
+### 2.13.0
+
+- 📋 Nouveau Kanban TUI persistant par workspace, accessible depuis la barre de status.
+- 🤖 Une session `tmux` OpenCode par carte active, avec reprise, feedback et arrêt manuel.
+- ✅ Cycle Backlog, In Progress, In Review et Done avec historique, diff, commit et push explicites.
 
 ### 2.9.1
 

@@ -18,6 +18,7 @@
 - 🔐 Exposed secrets detection
 - 🛡️ Commit blocking with secrets
 - 🚀 Projects Launchpad (list + quick switch)
+- 📋 Kanban TUI with Backlog, In Progress, In Review and Done cards
 - 🔗 Agent Skills: `.agent` symlink to the central `-agent` folder
 
 ## 🧠 Usage
@@ -32,10 +33,16 @@
 - Secrets: workspace scan + block commit if staged secrets.
 - Agent Skills: create a `.agent` symlink to the central `-agent` folder.
 - Launchpad: open projects from the launchpad, status bar rocket icon + `Cmd/Ctrl+Alt+L` shortcut, dedicated explorer view.
+- Kanban: use the `Kanban` status bar button. Each active card can start or resume an isolated OpenCode session in `tmux`; Done cards remain in history while their runtime is removed.
 
 ## ⚙️ Settings
 
-No dedicated settings. Status bar colors use:
+Kanban settings:
+
+- `pkvsconf.kanban.agentCommand`: agent command, defaults to `opencode --prompt {prompt}`.
+- `pkvsconf.kanban.tmuxCommand`: tmux executable, defaults to `tmux`.
+
+Status bar colors use:
 
 - `pkvsconf.rootSizeStatusBarItem.background`
 - `pkvsconf.rootSizeStatusBarItem.foreground`
@@ -53,6 +60,7 @@ No dedicated settings. Status bar colors use:
 - Rescanner les secrets
 - Commit (verification secrets)
 - Agent Skills
+- Open the agent Kanban
 
 ## 📦 Build & Package
 
@@ -64,10 +72,16 @@ npm run release
 ## 🧪 Install (Antigravity)
 
 - Command Palette: "Extensions: Install from VSIX..."
-- Select `release/vs-pkvsconf-2.2.0.vsix`
+- Select `release/vs-pkvsconf-2.13.0.vsix`
 - Reload window
 
 ## 🧾 Changelog
+
+### 2.13.0
+
+- 📋 Added a workspace-persistent Kanban TUI available from the status bar.
+- 🤖 Added one resumable OpenCode `tmux` session per active card, with feedback and manual stop actions.
+- ✅ Added Backlog, In Progress, In Review and Done workflow with history and explicit diff, commit and push actions.
 
 ### 2.2.0
 
