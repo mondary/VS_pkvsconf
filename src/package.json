@@ -2,7 +2,7 @@
   "name": "vs-pkvsconf",
   "displayName": "VS_pkvsconf",
   "description": "Adds a toolbar button in Explorer to reveal the active file in Finder.",
-  "version": "2.12.1",
+  "version": "2.16.0",
   "publisher": "Cmondary",
   "icon": "icon.png",
   "license": "MIT",
@@ -47,6 +47,8 @@
     "onCommand:pkvsconf.agentHistoryAddFromClipboard",
     "onCommand:pkvsconf.agentHistoryRun",
     "onCommand:pkvsconf.agentHistoryClear",
+    "onCommand:pkvsconf.kanbanOpen",
+    "onCommand:pkvsconf.kanbanOpenEditor",
     "onCommand:pkvsconf.openInDefaultBrowser",
     "onView:projectNotesView",
     "onView:projectIconView",
@@ -142,10 +144,32 @@
             "Ouvrir les deux volets"
           ],
           "description": "Volets à restaurer après la fermeture du Launchpad plein écran."
+        },
+        "pkvsconf.kanban.agentCommand": {
+          "type": "string",
+          "default": "opencode --prompt {prompt}",
+          "description": "Commande lancée dans la session tmux d'une carte. Placeholders: {prompt}, {promptFile}, {title}."
+        },
+        "pkvsconf.kanban.tmuxCommand": {
+          "type": "string",
+          "default": "tmux",
+          "description": "Nom ou chemin de l'exécutable tmux utilisé par le Kanban."
         }
       }
     },
     "commands": [
+      {
+        "command": "pkvsconf.kanbanOpen",
+        "title": "Ouvrir le Kanban des agents",
+        "category": "PK VS Conf",
+        "icon": "$(terminal)"
+      },
+      {
+        "command": "pkvsconf.kanbanOpenEditor",
+        "title": "Ouvrir le Kanban dans l'éditeur",
+        "category": "PK VS Conf",
+        "icon": "$(go-to-editor)"
+      },
       {
         "command": "pkvsconf.terminalSplitRight",
         "title": "Terminal: Split Right (PK)",

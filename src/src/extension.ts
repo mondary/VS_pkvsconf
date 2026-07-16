@@ -5,6 +5,7 @@ import * as path from "path";
 import * as cp from "child_process";
 import * as net from "net";
 import * as os from "os";
+import { registerKanban } from "./kanban";
 
 const SIZE_UNITS = ["KB", "MB", "GB", "TB"] as const;
 const ICON_PREFIX = "icon.";
@@ -4223,6 +4224,7 @@ async function getGitHubRepoUrlFromRoot(
 }
 
 export function activate(context: vscode.ExtensionContext) {
+  registerKanban(context);
   const provider = new ProjectIconViewProvider();
   let watcher: vscode.FileSystemWatcher | undefined;
   const tagsStore = new ExtensionTagsStore(context);
@@ -4316,7 +4318,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   const previewItem = vscode.window.createStatusBarItem(
     vscode.StatusBarAlignment.Left,
-    99
+    98
   );
   previewItem.text = "$(open-preview) Preview";
   previewItem.tooltip = "Lancer une preview de la page en cours";
@@ -4325,7 +4327,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   const titlebarColorItem = vscode.window.createStatusBarItem(
     vscode.StatusBarAlignment.Left,
-    98
+    97
   );
   titlebarColorItem.text = "$(symbol-color) Title Bar";
   titlebarColorItem.tooltip = "Changer la couleur de la barre de titre (aléatoire)";
@@ -4335,7 +4337,7 @@ export function activate(context: vscode.ExtensionContext) {
   // Secrets Detection Status Bar Item
   const secretsItem = vscode.window.createStatusBarItem(
     vscode.StatusBarAlignment.Left,
-    97
+    96
   );
   secretsItem.text = "$(shield) Secrets: --";
   secretsItem.tooltip = "Détection des secrets exposés";
@@ -4345,7 +4347,7 @@ export function activate(context: vscode.ExtensionContext) {
   // Agent Skills Status Bar Item
   const skillsSymlinkItem = vscode.window.createStatusBarItem(
     vscode.StatusBarAlignment.Left,
-    96
+    95
   );
   skillsSymlinkItem.text = "$(link) Agent Skills";
   skillsSymlinkItem.tooltip = "Créer un lien symbolique .agent vers le dossier -agent";
@@ -4354,7 +4356,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   const launchpadListItem = vscode.window.createStatusBarItem(
     vscode.StatusBarAlignment.Left,
-    95
+    94
   );
   launchpadListItem.text = "$(list-unordered) Projets";
   launchpadListItem.tooltip = "Ouvrir l'ancienne liste du Launchpad";
@@ -4363,7 +4365,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   const launchpadItem = vscode.window.createStatusBarItem(
     vscode.StatusBarAlignment.Left,
-    94
+    93
   );
   launchpadItem.text = "$(rocket) Launchpad";
   launchpadItem.tooltip = "Ouvrir le Launchpad projets en plein écran";
@@ -4713,17 +4715,19 @@ export function activate(context: vscode.ExtensionContext) {
         return;
       }
 
-      const activeEditorUri = vscode.window.activeTextEditor?.document.uri;
-      const activeTabUri = (
-        vscode.window.tabGroups.activeTabGroup.activeTab?.input as {
-          uri?: vscode.Uri;
-        } | null
-      )?.uri;
-      let uri = activeEditorUri ?? activeTabUri;
+      let uri = vscode.window.activeTextEditor?.document.uri;
 
       if (!uri) {
-        // If there's no active editor (e.g. focus is in Explorer), prefer the Git repo root(s)
-        // because workspace root can be a parent folder (like ~/Documents/GitHub).
+        for (const group of vscode.window.tabGroups.all) {
+          const tabUri = (group.activeTab?.input as { uri?: vscode.Uri } | undefined)?.uri;
+          if (tabUri) {
+            uri = tabUri;
+            break;
+          }
+        }
+      }
+
+      if (!uri) {
         const repos = await getGitRepoRootsFromGitApi();
         if (repos.length === 1) {
           uri = repos[0].rootUri;
@@ -4737,12 +4741,12 @@ export function activate(context: vscode.ExtensionContext) {
       }
 
       if (!uri) {
-        const workspaceFolders = vscode.workspace.workspaceFolders ?? [];
-        if (workspaceFolders.length === 1) {
-          uri = workspaceFolders[0].uri;
-        } else if (workspaceFolders.length > 1) {
+        const folders = vscode.workspace.workspaceFolders;
+        if (folders?.length === 1) {
+          uri = folders[0].uri;
+        } else if (folders && folders.length > 1) {
           const pick = await vscode.window.showQuickPick(
-            workspaceFolders.map((f) => ({ label: f.name, description: f.uri.fsPath, folder: f })),
+            folders.map((f) => ({ label: f.name, description: f.uri.fsPath, folder: f })),
             { placeHolder: "Reveal which workspace folder?" }
           );
           uri = pick?.folder.uri;
@@ -5592,7 +5596,8 @@ export function activate(context: vscode.ExtensionContext) {
   const terminalNewTabCmd = vscode.commands.registerCommand(
     "pkvsconf.terminalNewTab",
     async () => {
-      await vscode.commands.executeCommand("workbench.action.createTerminalEditor");
+      await vscode.commands.executeCommand("workbench.action.terminal.new");
+      await vscode.commands.executeCommand("workbench.action.terminal.moveToEditor");
     }
   );
 
@@ -5604,6 +5609,17 @@ export function activate(context: vscode.ExtensionContext) {
       await vscode.commands.executeCommand("workbench.action.terminal.newInActiveGroup");
     }
   );
+
+  const statusBarTerm = vscode.window.createStatusBarItem(
+    "pkvsconf.statusBarTerm",
+    vscode.StatusBarAlignment.Left,
+    99
+  );
+  statusBarTerm.text = "$(terminal) Term";
+  statusBarTerm.tooltip = "Open Terminal in New Editor Tab";
+  statusBarTerm.command = "pkvsconf.terminalNewTab";
+  statusBarTerm.show();
+  context.subscriptions.push(statusBarTerm);
 
   void refreshRootSize();
 
