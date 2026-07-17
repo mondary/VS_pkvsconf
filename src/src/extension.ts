@@ -3160,36 +3160,32 @@ function buildHtml(
     html, body {
       margin: 0;
       padding: 0;
-      height: 100%;
       width: 100%;
+      height: 100%;
+      background: transparent;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
 
     body {
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       justify-content: center;
       overflow: hidden;
-      background: var(--vscode-sideBar-background);
       color: var(--vscode-foreground);
     }
 
     .container {
-      height: 100%;
       width: 100%;
-      padding: 8px;
+      padding: 4px;
       box-sizing: border-box;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: var(--vscode-sideBar-background);
+      background: transparent;
     }
 
     .icon {
       display: block;
       width: 100%;
-      height: 100%;
-      object-fit: contain;
+      height: auto;
+      border-radius: 4px;
     }
 
     .fallback {

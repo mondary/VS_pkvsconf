@@ -17,9 +17,12 @@
 - 🎨 Workspace title bar color
 - 🔐 Exposed secrets detection
 - 🛡️ Commit blocking with secrets
-- 🚀 Projects Launchpad (list + quick switch)
+- 🚀 Projects Launchpad (fullscreen + list + quick switch)
 - 📋 Kanban TUI with Backlog, In Progress, In Review and Done cards
 - 🔗 Agent Skills: `.agent` symlink to the central `-agent` folder
+- ⛔ Add to .gitignore (right-click in explorer)
+- 👁️ Gitignore decorations: `⛔` badge on ignored files/folders in explorer
+- 🎯 Native codicon icons on all views (rocket, note, history, tag, palette)
 
 ## 🧠 Usage
 
@@ -31,9 +34,12 @@
 - Page preview: status bar button, PHP supported with auto server.
 - Title bar: auto color per workspace, button to regenerate.
 - Secrets: workspace scan + block commit if staged secrets.
-- Agent Skills: create a `.agent` symlink to the central `-agent` folder.
-- Launchpad: open projects from the launchpad, status bar rocket icon + `Cmd/Ctrl+Alt+L` shortcut, dedicated explorer view.
-- Kanban: use the `Kanban` status bar button. Each active card can start or resume an isolated OpenCode session in `tmux`; Done cards remain in history while their runtime is removed.
+- Agent Skills: creates a `.agent` symlink to the central `-agent` folder.
+- Launchpad: buttons in the Project Icon view to open fullscreen and add the current project. Shortcut `Cmd/Ctrl+Alt+L` for the list.
+- View order: `Launchpad Projets` appears before `Project Icon` in Explorer.
+- Kanban: `Kanban` status bar button. Each card can start or resume an isolated OpenCode session in `tmux`.
+- ⛔ Add to .gitignore: right-click a file/folder in explorer → automatically added to `.gitignore` (created if missing, deduplicated).
+- 👁️ Gitignore decorations: files and folders ignored by Git show a `⛔` badge in explorer. Auto-refresh when `.gitignore` changes.
 
 ## ⚙️ Settings
 
@@ -52,136 +58,35 @@ Status bar colors use:
 - Reveal Active File in Finder
 - Refresh Root Folder Size
 - Open GitHub Repository
-- Catégorie (Add Tag)
-- Rechercher des extensions
-- Regenerer la couleur de la title bar
-- Preview de la page en cours
-- Afficher les secrets exposes
-- Rescanner les secrets
-- Commit (verification secrets)
+- Category (Add Tag)
+- Search extensions
+- Regenerate title bar color
+- Preview active page
+- Show exposed secrets
+- Rescan secrets
+- Commit (secrets check)
 - Agent Skills
 - Open the agent Kanban
+- ⛔ Add to .gitignore
 
 ## 📦 Build & Package
 
 ```bash
 cd src
-npm run release
+npx tsc --outDir dist
+npx @vscode/vsce package --allow-missing-repository
 ```
 
-## 🧪 Install (Antigravity)
+## 🧪 Installation
 
 - Command Palette: "Extensions: Install from VSIX..."
-- Select `release/vs-pkvsconf-2.13.0.vsix`
+- Select the `.vsix` file in `release/`
+- Or via CLI: `code --install-extension release/vs-pkvsconf-2.2026.11.vsix --force`
 - Reload window
 
-## 🧾 Changelog
+## 📋 Changelog
 
-### 2.13.0
-
-- 📋 Added a workspace-persistent Kanban TUI available from the status bar.
-- 🤖 Added one resumable OpenCode `tmux` session per active card, with feedback and manual stop actions.
-- ✅ Added Backlog, In Progress, In Review and Done workflow with history and explicit diff, commit and push actions.
-
-### 2.2.0
-
-- 🎛️ Launchpad grid limited to ~4 apps per row (responsive).
-
-### 2.1.0
-
-- 🚀 Projects Launchpad: explorer view, status bar button, and keyboard shortcut to open/switch projects.
-- 🗂️ Two sections: “In Progress” and Launchpad projects (config `pkvsconf.launchpad.projects`).
-- 🔍 Command to add the current workspace to the Launchpad.
-- 🛠️ Fix: `pkvsconf.launchpad.projects` configuration registered and usable.
-
-### 2.0.0
-
-- 🚀 Projects Launchpad: explorer view, status bar button, and keyboard shortcut to open/switch projects.
-- 🗂️ Two sections: “In Progress” (open windows) and Launchpad projects (config `pkvsconf.launchpad.projects`).
-- 🔍 Command to add the current workspace to the Launchpad.
-
-### 1.40.0
-
-- 🔗 The `Agent Skills` button now creates a `.agent` symlink to `-agent`.
-- 🔁 If `.agent` already exists but points elsewhere, the symlink is replaced automatically.
-- ✅ If `.agent` already points to `-agent`, the extension reports that it is already present.
-
-### 1.39
-
-- 📝 Aligned `src/README.md` with the same content as the GitHub README.
-
-### 1.38
-
-- 📝 Added `src/README.md` so the Visual Studio Marketplace overview is populated correctly.
-- 🔗 Added the publisher store page link to the README.
-
-### 1.37
-
-- 🔗 The button is now `Agent Skills` and creates the `.agent` symlink to the central `-agent` folder.
-- 🛡️ `.agent/` and local secret patterns are ignored by Git to reduce accidental commits.
-- 🔗 Added a direct link to the Marketplace page in the README.
-
-### 0.3.37
-
-- 🔗 Added command to create a `.skills` symlink to a central folder.
-
-### 0.3.36
-
-- 📝 Switched license to MIT.
-
-### 0.3.35
-
-- 🚨 Automatic warning when a staged file contains secrets.
-
-### 0.3.34
-
-- 🛡️ Commit blocking if secrets are found in staged files.
-- 🔐 Added exposed secrets detection with status bar indicator.
-
-### 0.3.30
-
-- 🎨 Added a status bar button to regenerate the title bar color.
-
-### 0.3.29
-
-- 👁️ Added active page preview with PHP auto server.
-
-### 0.3.23
-
-- 🏷️ New "PK Extensions" tab icon.
-
-### 0.3.22
-
-- 🏷️ Extension name kept as "VS_pkvsconf" and tab shows "PK Extensions".
-
-### 0.3.21
-
-- 🏷️ Renamed tab to "PK Extensions".
-
-### 0.3.20
-
-- 🧩 New tab pictogram (extension/puzzle) and name "PK Extension".
-
-### 0.3.19
-
-- 🏷️ Updated Extensions tab icon (more explicit tag).
-
-### 0.3.6
-
-- 🏷️ "Extension Tags" view moved into Explorer (more stable).
-
-### 0.3.5
-
-- 🏷️ Adjusted "Extension Tags" view container for Extensions tab.
-
-### 0.3.4
-
-- 🏷️ Fix for registering the "Extension Tags" view in Extensions tab.
-
-### 0.3.3
-
-- 🏷️ Added extension tagging with "Extension Tags" view.
-- 🐙 Open GitHub Repository supports multi-repo selection.
+See [CHANGELOG.md](CHANGELOG.md) for full history.
 
 ## 🔗 Links
 

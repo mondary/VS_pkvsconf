@@ -35,3 +35,9 @@ PUBLISH.md
 secrets/
 **/secrets/
 
+.*
+dist/
+build/
+.venv/
+__pycache__/
+*.log
