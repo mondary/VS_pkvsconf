@@ -2,7 +2,7 @@
   "name": "vs-pkvsconf",
   "displayName": "VS_pkvsconf",
   "description": "Adds a toolbar button in Explorer to reveal the active file in Finder.",
-  "version": "2.16.0",
+  "version": "2.2026.3",
   "publisher": "Cmondary",
   "icon": "icon.png",
   "license": "MIT",
@@ -50,6 +50,7 @@
     "onCommand:pkvsconf.kanbanOpen",
     "onCommand:pkvsconf.kanbanOpenEditor",
     "onCommand:pkvsconf.openInDefaultBrowser",
+    "onCommand:pkvsconf.addToGitignore",
     "onView:projectNotesView",
     "onView:projectIconView",
     "onView:extensionTagsView",
@@ -324,6 +325,11 @@
         "command": "pkvsconf.openInDefaultBrowser",
         "title": "Ouvrir avec Chrome",
         "icon": "$(browser)"
+      },
+      {
+        "command": "pkvsconf.addToGitignore",
+        "title": "⛔ Ajouter au .gitignore",
+        "icon": "$(exclude)"
       }
     ],
     "colors": [
@@ -407,11 +413,15 @@
         {
           "command": "pkvsconf.createSkillsSymlink"
         },
-        {
-          "command": "pkvsconf.openInDefaultBrowser",
-          "when": "resourceExtname =~ /\\.html?$/"
-        }
-      ],
+      {
+        "command": "pkvsconf.openInDefaultBrowser",
+        "when": "resourceExtname =~ /\\.html?$/"
+      },
+      {
+        "command": "pkvsconf.addToGitignore",
+        "when": "false"
+      }
+    ],
       "extension/context": [
         {
           "command": "pkvsconf.addTagToExtension",
@@ -424,6 +434,10 @@
           "command": "pkvsconf.openInDefaultBrowser",
           "when": "resourceExtname =~ /\\.html?$/",
           "group": "navigation@2"
+        },
+        {
+          "command": "pkvsconf.addToGitignore",
+          "group": "navigation@3"
         }
       ],
       "editor/context": [

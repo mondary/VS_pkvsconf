@@ -5586,6 +5586,53 @@ export function activate(context: vscode.ExtensionContext) {
     }
   );
 
+  const addToGitignoreCmd = vscode.commands.registerCommand(
+    "pkvsconf.addToGitignore",
+    async (uri?: vscode.Uri) => {
+      const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+      if (!workspaceFolder || workspaceFolder.uri.scheme !== "file") {
+        vscode.window.showErrorMessage("Ajout au .gitignore impossible : aucun workspace local ouvert.");
+        return;
+      }
+
+      const targetUri = uri || vscode.window.activeTextEditor?.document.uri;
+      if (!targetUri) {
+        vscode.window.showErrorMessage("Aucun fichier ou dossier sélectionné pour ajouter au .gitignore.");
+        return;
+      }
+
+      const workspaceRoot = workspaceFolder.uri.fsPath;
+      const relativePath = path.relative(workspaceRoot, targetUri.fsPath).split(path.sep).join("/");
+      const normalized = relativePath.replace(/\/+$/, "");
+      const entry = normalized.endsWith("/") ? normalized : `${normalized}/`;
+
+      const gitignorePath = path.join(workspaceRoot, ".gitignore");
+      try {
+        let existing = "";
+        try {
+          existing = await fs.readFile(gitignorePath, "utf8");
+        } catch (error: any) {
+          if (error && error.code !== "ENOENT") {
+            throw error;
+          }
+        }
+
+        const lines = existing.split(/\r?\n/).map((line) => line.trim());
+        if (lines.includes(entry) || lines.includes(entry.replace(/\/$/, ""))) {
+          vscode.window.showInformationMessage(`${entry} est déjà présent dans .gitignore.`);
+          return;
+        }
+
+        const needsNewline = existing.length > 0 && !existing.endsWith("\n");
+        const updated = `${existing}${needsNewline ? "\n" : ""}${entry}\n`;
+        await fs.writeFile(gitignorePath, updated, "utf8");
+        vscode.window.showInformationMessage(`${entry} ajouté au .gitignore.`);
+      } catch (error) {
+        vscode.window.showErrorMessage(`Erreur lors de l'ajout au .gitignore : ${error}`);
+      }
+    }
+  );
+
   const terminalSplitRightCmd = vscode.commands.registerCommand(
     "pkvsconf.terminalSplitRight",
     async () => {
@@ -5640,6 +5687,7 @@ export function activate(context: vscode.ExtensionContext) {
     openRootFolderCmd,
     previewActivePageCmd,
     openInDefaultBrowserCmd,
+    addToGitignoreCmd,
     terminalSplitRightCmd,
     terminalNewTabCmd,
     terminalSplitBottomCmd
