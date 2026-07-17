@@ -1095,11 +1095,16 @@ async function buildLaunchpadHtml(webview, projects) {
 
         iconSizeSlider?.addEventListener('input', () => {
           const size = parseInt(iconSizeSlider.value);
-          iconSizeValue.textContent = size;
-          // Update CSS variables
-          document.querySelectorAll('.card img').forEach(img => {
+          iconSizeValue.textContent = size + 'px';
+          // Update all icon images (grid and mini)
+          document.querySelectorAll('.card img, .miniItem img').forEach(img => {
             img.style.width = size + 'px';
             img.style.height = size + 'px';
+          });
+          // Also update mini item containers
+          document.querySelectorAll('.miniItem').forEach(item => {
+            item.style.width = size + 'px';
+            item.style.height = size + 'px';
           });
           // Debounced save to config
           if (iconSizeTimer) clearTimeout(iconSizeTimer);
