@@ -14,6 +14,7 @@ const ICON_PREFIX = "icon.";
 const VIEW_ID = "projectIconView";
 const EXTENSION_TAGS_VIEW_ID = "extensionTagsView";
 const LAUNCHPAD_EXPLORER_VIEW_ID = "launchpadExplorerView";
+let currentSidebarIconSize;
 const PROJECT_NOTES_VIEW_ID = "projectNotesView";
 const EXTENSION_TAGS_STORAGE_KEY = "extensionTags";
 const WORKSPACE_TITLEBAR_COLOR_KEY = "workspaceTitlebarColor";
@@ -796,12 +797,15 @@ async function buildLaunchpadHtml(webview, projects) {
         lastOpened: p.lastOpened
     })));
     const viewMode = getLaunchpadViewMode();
-    const sidebarIconSize = vscode.workspace.getConfiguration("pkvsconf").get("launchpad.sidebarIconSize") ?? 72;
+    if (currentSidebarIconSize === undefined) {
+        currentSidebarIconSize = vscode.workspace.getConfiguration("pkvsconf").get("launchpad.sidebarIconSize") ?? 60;
+    }
+    const sidebarIconSize = currentSidebarIconSize;
     const gridCardsHtml = cards
-        .map((c) => {
+        .map((c, index) => {
         const title = `${c.name}${c.lastOpened ? " - " + formatRelativeTime(c.lastOpened) : ""}`;
         return `
-        <button class="card${c.lastOpened ? ' recent' : ''}" data-path="${escapeAttr(c.path)}" data-name="${escapeAttr(c.name)}" title="${escapeAttr(title)}">
+        <button class="card${c.lastOpened ? ' recent' : ''}" data-path="${escapeAttr(c.path)}" data-name="${escapeAttr(c.name)}" data-last-opened="${c.lastOpened || 0}" data-index="${index}" title="${escapeAttr(title)}">
           <img src="${escapeAttr(c.icon)}" alt="${escapeAttr(c.name)}" />
           <div class="name">${escapeHtml(c.name)}</div>
           ${c.lastOpened ? '<div class="badge recent">récent</div>' : ''}
@@ -809,10 +813,10 @@ async function buildLaunchpadHtml(webview, projects) {
     })
         .join("");
     const miniItemsHtml = cards
-        .map((c) => {
+        .map((c, index) => {
         const title = `${c.name}${c.lastOpened ? " - " + formatRelativeTime(c.lastOpened) : ""}`;
         return `
-        <button class="miniItem${c.lastOpened ? ' recent' : ''}" data-path="${escapeAttr(c.path)}" data-name="${escapeAttr(c.name)}" type="button" aria-label="${escapeAttr(c.name)}" title="${escapeAttr(title)}">
+        <button class="miniItem${c.lastOpened ? ' recent' : ''}" data-path="${escapeAttr(c.path)}" data-name="${escapeAttr(c.name)}" data-last-opened="${c.lastOpened || 0}" data-index="${index}" type="button" aria-label="${escapeAttr(c.name)}" title="${escapeAttr(title)}">
           <img src="${escapeAttr(c.icon)}" alt="${escapeAttr(c.name)}" />
           ${c.lastOpened ? '<div class="miniBadge recent">●</div>' : ''}
         </button>`;
@@ -838,6 +842,9 @@ async function buildLaunchpadHtml(webview, projects) {
           width: 100%;
           max-width: 760px;
           margin: 0 auto;
+          display: flex;
+          flex-direction: column;
+          height: 100%;
         }
         .topbar {
           display: flex;
@@ -856,6 +863,20 @@ async function buildLaunchpadHtml(webview, projects) {
           display: inline-flex;
           gap: 6px;
           align-items: center;
+        }
+        .sortSelect {
+          height: 26px;
+          border-radius: 6px;
+          border: 1px solid var(--vscode-editorWidget-border, #4444);
+          background: var(--vscode-editor-background);
+          color: var(--vscode-foreground);
+          padding: 0 6px;
+          font-size: 11px;
+          outline: none;
+          cursor: pointer;
+        }
+        .sortSelect:focus {
+          border-color: var(--vscode-focusBorder);
         }
         .iconBtn {
           border: 1px solid var(--vscode-editorWidget-border, #4444);
@@ -883,6 +904,9 @@ async function buildLaunchpadHtml(webview, projects) {
           grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
           gap: 8px;
           width: 100%;
+          overflow-y: auto;
+          flex: 1;
+          min-height: 0;
         }
         .card {
           border: none;
@@ -915,14 +939,16 @@ async function buildLaunchpadHtml(webview, projects) {
           align-items: center;
           gap: 6px;
           flex-wrap: wrap;
-          overflow: hidden;
+          overflow-y: auto;
           padding: 2px 0;
+          flex: 1;
+          min-height: 0;
         }
         .miniItem {
           border: none;
           background: transparent;
-          height: 32px;
-          width: 32px;
+          height: ${sidebarIconSize}px;
+          width: ${sidebarIconSize}px;
           padding: 0;
           border-radius: 8px;
           cursor: pointer;
@@ -934,8 +960,8 @@ async function buildLaunchpadHtml(webview, projects) {
           background: var(--vscode-list-hoverBackground);
         }
         .miniItem img {
-          height: 32px;
-          width: 32px;
+          height: ${sidebarIconSize}px;
+          width: ${sidebarIconSize}px;
           object-fit: contain;
           border-radius: 6px;
           background: transparent;
@@ -943,8 +969,8 @@ async function buildLaunchpadHtml(webview, projects) {
         .miniAdd {
           border: 1px dashed var(--vscode-editorWidget-border, #4444);
           background: transparent;
-          height: 32px;
-          width: 32px;
+          height: ${sidebarIconSize}px;
+          width: ${sidebarIconSize}px;
           padding: 0;
           border-radius: 8px;
           cursor: pointer;
@@ -1009,9 +1035,8 @@ async function buildLaunchpadHtml(webview, projects) {
           display: flex;
           align-items: center;
           gap: 8px;
-          margin-top: 10px;
-          padding: 6px 0;
-          border-top: 1px solid var(--vscode-editorWidget-border, #4444);
+          margin-bottom: 8px;
+          padding: 4px 0;
         }
         .iconSizeBar input[type="range"] {
           flex: 1;
@@ -1030,15 +1055,23 @@ async function buildLaunchpadHtml(webview, projects) {
     <body>
       <div class="container">
         <div class="topbar">
-          <div class="title">Projets (${viewMode === "mini" ? "mini" : "grille"})</div>
+          <div class="title">Projets</div>
           <div class="actions">
-            <button id="toggleBtn" class="iconBtn" type="button" aria-label="Basculer le mode d'affichage" title="Basculer le mode">≡</button>
+            <select id="sortSelect" class="sortSelect" aria-label="Trier les projets">
+              <option value="alpha">A → Z</option>
+              <option value="recent">Récents</option>
+            </select>
+            <button id="toggleBtn" class="iconBtn" type="button" aria-label="Basculer le mode d'affichage" title="Basculer le mode">${viewMode === "grid" ? "⊞" : "≡"}</button>
             <button id="addBtn" class="iconBtn" type="button" aria-label="Ajouter un projet au Launchpad" title="Ajouter un projet">+</button>
           </div>
         </div>
         <div class="searchBar">
           <input type="text" id="search" placeholder="Rechercher..." />
           <span id="searchCount" class="searchCount">${cards.length}/${cards.length}</span>
+        </div>
+        <div class="iconSizeBar">
+          <input type="range" id="iconSizeSlider" min="32" max="128" value="${sidebarIconSize}" />
+          <span id="iconSizeValue" class="iconSizeValue">${sidebarIconSize}px</span>
         </div>
         ${viewMode === "mini"
         ? `<div class="miniRow" role="list">
@@ -1047,17 +1080,42 @@ async function buildLaunchpadHtml(webview, projects) {
         : `<div class="grid">
                 ${gridCardsHtml}
               </div>`}
-        <div class="iconSizeBar">
-          <input type="range" id="iconSizeSlider" min="32" max="128" value="${sidebarIconSize}" />
-          <span id="iconSizeValue" class="iconSizeValue">${sidebarIconSize}px</span>
-        </div>
       </div>
       <script nonce="${nonce}">
         const vscode = acquireVsCodeApi();
         const search = document.getElementById('search');
         const searchCount = document.getElementById('searchCount');
+        const sortSelect = document.getElementById('sortSelect');
         const total = ${cards.length};
-        const items = document.querySelectorAll('[data-path]');
+        const items = Array.from(document.querySelectorAll('[data-path]'));
+        const gridEl = document.querySelector('.grid, .miniRow');
+
+        function filterItems() {
+          const q = search.value.toLowerCase();
+          let visible = 0;
+          items.forEach(el => {
+            const match = el.dataset.name.toLowerCase().includes(q);
+            el.style.display = match ? '' : 'none';
+            if (match) visible++;
+          });
+          searchCount.textContent = visible + '/' + total;
+        }
+
+        function sortItems(mode) {
+          if (!gridEl) return;
+          const sorted = [...items];
+          if (mode === 'alpha') {
+            sorted.sort((a, b) => (a.dataset.name || '').localeCompare(b.dataset.name || ''));
+          } else if (mode === 'recent') {
+            sorted.sort((a, b) => {
+              const ta = parseInt(a.dataset.lastOpened || '0', 10);
+              const tb = parseInt(b.dataset.lastOpened || '0', 10);
+              if (ta !== tb) return tb - ta;
+              return (a.dataset.name || '').localeCompare(b.dataset.name || '');
+            });
+          }
+          sorted.forEach(el => gridEl.appendChild(el));
+        }
 
         function filterItems() {
           const q = search.value.toLowerCase();
@@ -1071,6 +1129,10 @@ async function buildLaunchpadHtml(webview, projects) {
         }
 
         search?.addEventListener('input', filterItems);
+
+        sortSelect?.addEventListener('change', () => {
+          sortItems(sortSelect.value);
+        });
 
         document.getElementById('addBtn')?.addEventListener('click', () => {
           vscode.postMessage({ command: 'add' });
@@ -1132,7 +1194,7 @@ async function buildLaunchpadPanelHtml(webview, projects) {
         const title = `${c.name}\n${c.path}${c.lastOpened ? "\nOuvert " + formatRelativeTime(c.lastOpened) : ""}`;
         const initials = c.name.trim().slice(0, 2).toUpperCase();
         return `
-        <button class="app" type="button" data-index="${index}" data-path="${escapeAttr(c.path)}" data-name="${escapeAttr(c.name.toLowerCase())}" title="${escapeAttr(title)}">
+        <button class="app${c.lastOpened ? ' recent' : ''}" type="button" data-index="${index}" data-path="${escapeAttr(c.path)}" data-name="${escapeAttr(c.name.toLowerCase())}" data-last-opened="${c.lastOpened || 0}" title="${escapeAttr(title)}">
           <span class="iconWrap">
             <img class="icon" src="${escapeAttr(c.icon)}" alt="${escapeAttr(c.name)}" />
           </span>
@@ -1324,6 +1386,34 @@ async function buildLaunchpadPanelHtml(webview, projects) {
           color: var(--muted);
           font-size: 12px;
           pointer-events: none;
+        }
+        .sortWrap {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+        .sortLabel {
+          font-size: 12px;
+          color: var(--muted);
+          white-space: nowrap;
+        }
+        .sortSelect {
+          height: 32px;
+          border-radius: 10px;
+          border: 1px solid var(--panel-border);
+          background: rgba(255,255,255,0.05);
+          color: var(--text);
+          padding: 0 10px;
+          font-size: 12px;
+          outline: none;
+          cursor: pointer;
+          transition: border-color 0.15s ease;
+        }
+        .sortSelect:hover {
+          border-color: var(--panel-border-strong);
+        }
+        .sortSelect:focus {
+          border-color: color-mix(in srgb, var(--focus-color) 54%, transparent);
         }
         .apps {
           align-self: stretch;
@@ -1825,7 +1915,15 @@ async function buildLaunchpadPanelHtml(webview, projects) {
             <input id="search" class="search" type="search" autocomplete="off" spellcheck="false" placeholder="Rechercher un projet" aria-label="Rechercher un projet" />
             <span class="shortcutHint">/</span>
           </div>
-          <div aria-hidden="true"></div>
+          <div aria-hidden="true">
+            <div class="sortWrap">
+              <span class="sortLabel">Trier</span>
+              <select id="sortSelect" class="sortSelect" aria-label="Trier les projets">
+                <option value="alpha">A → Z</option>
+                <option value="recent">Récents</option>
+              </select>
+            </div>
+          </div>
         </header>
         ${cards.length
         ? `<section id="apps" class="apps" aria-label="Projets">${cardsHtml}</section>`
@@ -1907,6 +2005,7 @@ ${shortcutsHtml}
         const visibleCount = document.getElementById('visibleCount');
         const apps = Array.from(document.querySelectorAll('.app'));
         const appsGrid = document.getElementById('apps');
+        const sortSelect = document.getElementById('sortSelect');
         const columnsInput = document.getElementById('columnsInput');
         const rowsInput = document.getElementById('rowsInput');
         const iconSizeInput = document.getElementById('iconSizeInput');
@@ -1963,6 +2062,22 @@ ${shortcutsHtml}
           if (!visible.length) return;
           focusedIndex = Math.min(Math.max(index, 0), visible.length - 1);
           visible[focusedIndex]?.focus({ preventScroll: false });
+        }
+
+        function sortApps(mode) {
+          if (!appsGrid || !apps.length) return;
+          const sorted = [...apps];
+          if (mode === 'alpha') {
+            sorted.sort((a, b) => (a.dataset.name || '').localeCompare(b.dataset.name || ''));
+          } else if (mode === 'recent') {
+            sorted.sort((a, b) => {
+              const ta = parseInt(a.dataset.lastOpened || '0', 10);
+              const tb = parseInt(b.dataset.lastOpened || '0', 10);
+              if (ta !== tb) return tb - ta;
+              return (a.dataset.name || '').localeCompare(b.dataset.name || '');
+            });
+          }
+          sorted.forEach(el => appsGrid.appendChild(el));
         }
 
         function applySearch() {
@@ -2090,6 +2205,10 @@ ${shortcutsHtml}
           input?.addEventListener('change', () => applyLayout());
         });
 
+        sortSelect?.addEventListener('change', () => {
+          sortApps(sortSelect.value);
+        });
+
         document.getElementById('openLaunchpadSettings')?.addEventListener('click', () => {
           post('openSettings');
         });
@@ -2179,6 +2298,7 @@ ${shortcutsHtml}
         });
 
         applyLayout({ save: false });
+        if (sortSelect) sortApps(sortSelect.value);
         requestAnimationFrame(() => {
           if (apps.length) {
             focusApp(0);
@@ -2506,6 +2626,7 @@ class LaunchpadWebviewProvider {
                 await this.render(webviewView);
             }
             else if (message.command === "updateIconSize" && typeof message.size === "number") {
+                currentSidebarIconSize = message.size;
                 await vscode.workspace.getConfiguration("pkvsconf").update("launchpad.sidebarIconSize", message.size, vscode.ConfigurationTarget.Global);
             }
         });

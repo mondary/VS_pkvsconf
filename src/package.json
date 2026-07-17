@@ -148,7 +148,7 @@
         },
         "pkvsconf.launchpad.sidebarIconSize": {
           "type": "number",
-          "default": 72,
+          "default": 60,
           "minimum": 32,
           "maximum": 128,
           "description": "Taille des pictogrammes dans la vue Launchpad sidebar."
