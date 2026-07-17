@@ -6,7 +6,7 @@ Toutes les modifications notables de **VS_pkvsconf** sont documentées ici.
 
 ## TODO — Roadmap
 
-Statut : `2.2026.11`
+Statut : `2.2026.12`
 
 ### Feature 1 — Add to .gitignore ✅
 - [x] Commande « ⛔ Ajouter au .gitignore » au clic droit explorer
@@ -18,9 +18,21 @@ Statut : `2.2026.11`
 - [x] Auto-refresh quand `.gitignore` change
 - [x] Badge emoji (`⛔`) pour visibilité maximale
 
-### Explorer UX
+### Explorer UX ✅
 - [x] Boutons Launchpad déplacés vers la vue Project Icon
-- [ ] Feature 2 (à définir par l'utilisateur)
+- [x] Icônes codicons sur toutes les vues
+- [x] Champ de recherche dans la sidebar Launchpad
+
+### Notes ✅
+- [x] Auto-save renforcé (blur + indicateur "✓ Sauvé")
+- [x] Mode aperçu avec checkboxes interactives
+- [x] Accordéon "Notes masquées" pour les items cochés
+
+### Title bar ✅
+- [x] Unicité de couleur entre instances VS Code (globalState)
+
+### Reveal in Finder ✅
+- [x] Fix : ouvre le bon dossier sur macOS (cp.exec au lieu de openExternal)
 
 ### Documentation & tooling
 - [x] Skill versionning fusionnée avec skill README (FR + EN)
@@ -31,6 +43,18 @@ Statut : `2.2026.11`
 ---
 
 ## Releases
+
+### [2.2026.12] - 2026-07-17
+#### Fixed
+- 🐛 Reveal in Finder : ouvre maintenant le bon dossier sur macOS (cp.exec au lieu de openExternal)
+#### Added
+- 🔍 Champ de recherche dans la sidebar Launchpad Projets
+- 👁️ Mode aperçu dans les notes avec checkboxes interactives
+- 📋 Accordéon "Notes masquées" pour les items cochés (- [x])
+- 💾 Auto-save renforcé : sauvegarde immédiate au blur + indicateur "✓ Sauvé"
+- 🎨 Title bar : unicité de couleur entre instances VS Code (globalState)
+#### Changed
+- 📝 Mise à jour VERSION, CHANGELOG, README, README_en
 
 ### [2.2026.11] - 2026-07-17
 #### Changed

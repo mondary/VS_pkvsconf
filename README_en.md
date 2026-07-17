@@ -23,6 +23,10 @@
 - ⛔ Add to .gitignore (right-click in explorer)
 - 👁️ Gitignore decorations: `⛔` badge on ignored files/folders in explorer
 - 🎯 Native codicon icons on all views (rocket, note, history, tag, palette)
+- 🔍 Search field in Launchpad sidebar
+- 👁️ Notes preview mode with checkboxes + "Hidden notes" accordion
+- 💾 Enhanced auto-save (blur + save indicator)
+- 🎨 Title bar: cross-instance color uniqueness (globalState)
 
 ## 🧠 Usage
 
@@ -81,7 +85,7 @@ npx @vscode/vsce package --allow-missing-repository
 
 - Command Palette: "Extensions: Install from VSIX..."
 - Select the `.vsix` file in `release/`
-- Or via CLI: `code --install-extension release/vs-pkvsconf-2.2026.11.vsix --force`
+- Or via CLI: `code --install-extension release/vs-pkvsconf-2.2026.12.vsix --force`
 - Reload window
 
 ## 📋 Changelog

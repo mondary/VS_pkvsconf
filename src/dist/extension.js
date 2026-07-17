@@ -18,6 +18,7 @@ const PROJECT_NOTES_VIEW_ID = "projectNotesView";
 const EXTENSION_TAGS_STORAGE_KEY = "extensionTags";
 const WORKSPACE_TITLEBAR_COLOR_KEY = "workspaceTitlebarColor";
 const WORKSPACE_TITLEBAR_COLOR_HISTORY_KEY = "workspaceTitlebarColorHistory";
+const TITLEBAR_COLOR_GLOBAL_MAP_KEY = "titlebarColorGlobalMap";
 const CODEX_RESUME_STORAGE_KEY = "codexResumeCommands";
 const AGENT_HISTORY_STORAGE_KEY = "agentHistory";
 const CODEX_HISTORY_LAST_TS_KEY = "codexHistoryLastTs";
@@ -612,7 +613,12 @@ async function revealProjectInFinder(project) {
     if (!target) {
         return;
     }
-    await vscode.env.openExternal(vscode.Uri.file(target.path));
+    if (process.platform === "darwin") {
+        cp.exec(`open "${target.path}"`);
+    }
+    else {
+        await vscode.env.openExternal(vscode.Uri.file(target.path));
+    }
 }
 async function pickProjectForAction(placeHolder) {
     const projects = getSortedLaunchpadProjects();
@@ -794,7 +800,7 @@ async function buildLaunchpadHtml(webview, projects) {
         .map((c) => {
         const title = `${c.name}${c.lastOpened ? " - " + formatRelativeTime(c.lastOpened) : ""}`;
         return `
-        <button class="card${c.lastOpened ? ' recent' : ''}" data-path="${escapeAttr(c.path)}" title="${escapeAttr(title)}">
+        <button class="card${c.lastOpened ? ' recent' : ''}" data-path="${escapeAttr(c.path)}" data-name="${escapeAttr(c.name)}" title="${escapeAttr(title)}">
           <img src="${escapeAttr(c.icon)}" alt="${escapeAttr(c.name)}" />
           <div class="name">${escapeHtml(c.name)}</div>
           ${c.lastOpened ? '<div class="badge recent">récent</div>' : ''}
@@ -805,7 +811,7 @@ async function buildLaunchpadHtml(webview, projects) {
         .map((c) => {
         const title = `${c.name}${c.lastOpened ? " - " + formatRelativeTime(c.lastOpened) : ""}`;
         return `
-        <button class="miniItem${c.lastOpened ? ' recent' : ''}" data-path="${escapeAttr(c.path)}" type="button" aria-label="${escapeAttr(c.name)}" title="${escapeAttr(title)}">
+        <button class="miniItem${c.lastOpened ? ' recent' : ''}" data-path="${escapeAttr(c.path)}" data-name="${escapeAttr(c.name)}" type="button" aria-label="${escapeAttr(c.name)}" title="${escapeAttr(title)}">
           <img src="${escapeAttr(c.icon)}" alt="${escapeAttr(c.name)}" />
           ${c.lastOpened ? '<div class="miniBadge recent">●</div>' : ''}
         </button>`;
@@ -970,6 +976,34 @@ async function buildLaunchpadHtml(webview, projects) {
           color: var(--vscode-terminal-ansiGreen, #4ec9b0);
           line-height: 1;
         }
+        .searchBar {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin-bottom: 8px;
+        }
+        .searchBar input {
+          flex: 1;
+          height: 26px;
+          border: 1px solid var(--vscode-editorWidget-border, #4444);
+          border-radius: 6px;
+          background: var(--vscode-editor-background);
+          color: var(--vscode-foreground);
+          padding: 0 8px;
+          font-size: 12px;
+          outline: none;
+        }
+        .searchBar input:focus {
+          border-color: var(--vscode-focusBorder);
+        }
+        .searchBar input::placeholder {
+          color: var(--vscode-input-placeholderForeground);
+        }
+        .searchCount {
+          font-size: 11px;
+          color: var(--vscode-descriptionForeground);
+          white-space: nowrap;
+        }
       </style>
     </head>
     <body>
@@ -981,6 +1015,10 @@ async function buildLaunchpadHtml(webview, projects) {
             <button id="addBtn" class="iconBtn" type="button" aria-label="Ajouter un projet au Launchpad" title="Ajouter un projet">+</button>
           </div>
         </div>
+        <div class="searchBar">
+          <input type="text" id="search" placeholder="Rechercher..." />
+          <span id="searchCount" class="searchCount">${cards.length}/${cards.length}</span>
+        </div>
         ${viewMode === "mini"
         ? `<div class="miniRow" role="list">
                 ${miniItemsHtml}
@@ -991,6 +1029,24 @@ async function buildLaunchpadHtml(webview, projects) {
       </div>
       <script nonce="${nonce}">
         const vscode = acquireVsCodeApi();
+        const search = document.getElementById('search');
+        const searchCount = document.getElementById('searchCount');
+        const total = ${cards.length};
+        const items = document.querySelectorAll('[data-path]');
+
+        function filterItems() {
+          const q = search.value.toLowerCase();
+          let visible = 0;
+          items.forEach(el => {
+            const match = el.dataset.name.toLowerCase().includes(q);
+            el.style.display = match ? '' : 'none';
+            if (match) visible++;
+          });
+          searchCount.textContent = visible + '/' + total;
+        }
+
+        search?.addEventListener('input', filterItems);
+
         document.getElementById('addBtn')?.addEventListener('click', () => {
           vscode.postMessage({ command: 'add' });
         });
@@ -2141,13 +2197,124 @@ async function buildProjectNotesHtml(webview, initialContent, filePath) {
           outline: 1px solid var(--vscode-focusBorder);
           outline-offset: 2px;
         }
+        .saveIndicator {
+          position: fixed;
+          bottom: 12px;
+          right: 12px;
+          font-size: 11px;
+          color: var(--vscode-terminal-ansiGreen, #4ec9b0);
+          opacity: 0;
+          transition: opacity 0.3s ease;
+          pointer-events: none;
+        }
+        .saveIndicator.visible {
+          opacity: 1;
+        }
+        .actions {
+          display: inline-flex;
+          gap: 6px;
+          align-items: center;
+        }
+        .iconBtn {
+          border: 1px solid var(--vscode-editorWidget-border, #4444);
+          background: var(--vscode-editor-background);
+          color: var(--vscode-foreground);
+          border-radius: 8px;
+          height: 24px;
+          width: 24px;
+          cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 12px;
+        }
+        .iconBtn:hover {
+          background: var(--vscode-list-hoverBackground);
+        }
+        .preview {
+          display: none;
+          width: 100%;
+          min-height: 240px;
+          height: calc(100vh - 70px);
+          overflow-y: auto;
+          box-sizing: border-box;
+          background: var(--vscode-editor-background);
+          border-radius: 12px;
+          padding: 10px;
+          font-size: 12px;
+          line-height: 1.6;
+        }
+        .preview.active {
+          display: block;
+        }
+        textarea.hidden {
+          display: none;
+        }
+        .previewLine {
+          padding: 2px 0;
+        }
+        .previewLine.checkbox {
+          display: flex;
+          align-items: flex-start;
+          gap: 6px;
+        }
+        .previewLine.checkbox input[type="checkbox"] {
+          margin-top: 3px;
+          cursor: pointer;
+          accent-color: var(--vscode-focusBorder);
+        }
+        .previewLine.checkbox label {
+          cursor: pointer;
+          user-select: none;
+        }
+        .previewLine.checkbox input:checked + label {
+          text-decoration: line-through;
+          opacity: 0.6;
+        }
+        details.hiddenNotes {
+          margin-top: 8px;
+          border-top: 1px solid var(--vscode-editorWidget-border, #4444);
+          padding-top: 6px;
+        }
+        details.hiddenNotes summary {
+          font-size: 11px;
+          color: var(--vscode-descriptionForeground);
+          cursor: pointer;
+          user-select: none;
+          padding: 4px 0;
+        }
+        details.hiddenNotes summary:hover {
+          color: var(--vscode-foreground);
+        }
+        details.hiddenNotes .hiddenItem {
+          opacity: 0.5;
+          padding: 2px 0;
+          display: flex;
+          align-items: flex-start;
+          gap: 6px;
+        }
+        details.hiddenNotes .hiddenItem input[type="checkbox"] {
+          margin-top: 3px;
+          cursor: pointer;
+          accent-color: var(--vscode-focusBorder);
+        }
+        details.hiddenNotes .hiddenItem label {
+          cursor: pointer;
+          user-select: none;
+          text-decoration: line-through;
+        }
       </style>
     </head>
     <body>
       <div class="topbar">
         <div class="title" title="${filePath}">${path.basename(filePath)}</div>
+        <div class="actions">
+          <button id="togglePreview" class="iconBtn" type="button" aria-label="Basculer aperçu" title="Basculer aperçu">👁</button>
+        </div>
       </div>
       <textarea id="notes" spellcheck="false" placeholder="Notes du projet (Markdown OK)…">${escaped}</textarea>
+      <div id="preview" class="preview"></div>
+      <div id="saveIndicator" class="saveIndicator">✓ Sauvé</div>
       <script nonce="${nonce}">
         const vscode = acquireVsCodeApi();
         const el = document.getElementById('notes');
@@ -2193,11 +2360,136 @@ async function buildProjectNotesHtml(webview, initialContent, filePath) {
         });
 
         let t = null;
+        const indicator = document.getElementById('saveIndicator');
+        let indicatorTimer = null;
+
+        function showSaveIndicator() {
+          if (indicatorTimer) clearTimeout(indicatorTimer);
+          indicator.classList.add('visible');
+          indicatorTimer = setTimeout(() => {
+            indicator.classList.remove('visible');
+          }, 1200);
+        }
+
         el.addEventListener('input', () => {
           if (t) clearTimeout(t);
           t = setTimeout(() => {
             vscode.postMessage({ command: 'save', content: el.value });
+            showSaveIndicator();
           }, 350);
+        });
+
+        el.addEventListener('blur', () => {
+          if (t) clearTimeout(t);
+          vscode.postMessage({ command: 'save', content: el.value });
+          showSaveIndicator();
+        });
+
+        // Preview mode
+        const preview = document.getElementById('preview');
+        const toggleBtn = document.getElementById('togglePreview');
+        let previewMode = false;
+
+        function escapeHtml(text) {
+          return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+
+        function renderPreview() {
+          const lines = el.value.split('\\n');
+          const activeLines = [];
+          const hiddenLines = [];
+
+          lines.forEach((line, idx) => {
+            const checkboxMatch = line.match(/^(\\s*)- \\[([ xX])\\] (.*)$/);
+            if (checkboxMatch) {
+              const indent = checkboxMatch[1];
+              const checked = checkboxMatch[2] !== ' ';
+              const text = checkboxMatch[3];
+              if (checked) {
+                hiddenLines.push({ idx, indent, text, checked });
+              } else {
+                activeLines.push({ idx, indent, text, checked, isCheckbox: true });
+              }
+            } else {
+              activeLines.push({ idx, line, isCheckbox: false });
+            }
+          });
+
+          let html = '';
+
+          // Active lines
+          activeLines.forEach(item => {
+            if (item.isCheckbox) {
+              html += '<div class="previewLine checkbox">';
+              html += '<input type="checkbox" data-line="' + item.idx + '"' + (item.checked ? ' checked' : '') + ' />';
+              html += '<label>' + escapeHtml(item.text) + '</label>';
+              html += '</div>';
+            } else {
+              const trimmed = item.line.trim();
+              if (trimmed.startsWith('# ')) {
+                html += '<div class="previewLine"><strong>' + escapeHtml(trimmed.slice(2)) + '</strong></div>';
+              } else if (trimmed.startsWith('## ')) {
+                html += '<div class="previewLine"><strong>' + escapeHtml(trimmed.slice(3)) + '</strong></div>';
+              } else if (trimmed.startsWith('### ')) {
+                html += '<div class="previewLine"><strong>' + escapeHtml(trimmed.slice(4)) + '</strong></div>';
+              } else if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+                html += '<div class="previewLine">• ' + escapeHtml(trimmed.slice(2)) + '</div>';
+              } else if (trimmed === '') {
+                html += '<div class="previewLine">&nbsp;</div>';
+              } else {
+                html += '<div class="previewLine">' + escapeHtml(item.line) + '</div>';
+              }
+            }
+          });
+
+          // Hidden lines (checked checkboxes)
+          if (hiddenLines.length > 0) {
+            html += '<details class="hiddenNotes">';
+            html += '<summary>Notes masquées (' + hiddenLines.length + ')</summary>';
+            hiddenLines.forEach(item => {
+              html += '<div class="hiddenItem">';
+              html += '<input type="checkbox" data-line="' + item.idx + '" checked />';
+              html += '<label>' + escapeHtml(item.text) + '</label>';
+              html += '</div>';
+            });
+            html += '</details>';
+          }
+
+          preview.innerHTML = html;
+
+          // Add checkbox click handlers
+          preview.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+            cb.addEventListener('change', () => {
+              const lineIdx = parseInt(cb.dataset.line);
+              const lines = el.value.split('\\n');
+              const line = lines[lineIdx];
+              const match = line.match(/^(\\s*)- \\[([ xX])\\] (.*)$/);
+              if (match) {
+                const newChecked = cb.checked ? 'x' : ' ';
+                lines[lineIdx] = match[1] + '- [' + newChecked + '] ' + match[3];
+                el.value = lines.join('\\n');
+                vscode.postMessage({ command: 'save', content: el.value });
+                showSaveIndicator();
+                renderPreview();
+              }
+            });
+          });
+        }
+
+        toggleBtn.addEventListener('click', () => {
+          previewMode = !previewMode;
+          if (previewMode) {
+            el.classList.add('hidden');
+            preview.classList.add('active');
+            toggleBtn.textContent = '✏';
+            toggleBtn.title = 'Basculer édition';
+            renderPreview();
+          } else {
+            el.classList.remove('hidden');
+            preview.classList.remove('active');
+            toggleBtn.textContent = '👁';
+            toggleBtn.title = 'Basculer aperçu';
+          }
         });
       </script>
     </body>
@@ -2960,10 +3252,29 @@ function getTitlebarColorHistory(context) {
     }
     return raw.filter((v) => typeof v === "string");
 }
+function getTitlebarColorGlobalMap(context) {
+    const raw = context.globalState.get(TITLEBAR_COLOR_GLOBAL_MAP_KEY);
+    if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+        return raw;
+    }
+    return {};
+}
+async function setTitlebarColorGlobalMap(context, map) {
+    await context.globalState.update(TITLEBAR_COLOR_GLOBAL_MAP_KEY, map);
+}
 async function pickNextTitlebarColor(context) {
     const history = getTitlebarColorHistory(context);
     const recent = new Set(history.slice(0, 10).map((c) => c.toLowerCase()));
-    const candidates = TITLEBAR_COLOR_PALETTE.filter((c) => !recent.has(c.toLowerCase()));
+    // Also exclude colors used by other workspaces
+    const globalMap = getTitlebarColorGlobalMap(context);
+    const currentPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    const usedByOthers = new Set();
+    for (const [wsPath, color] of Object.entries(globalMap)) {
+        if (wsPath !== currentPath && color) {
+            usedByOthers.add(color.toLowerCase());
+        }
+    }
+    const candidates = TITLEBAR_COLOR_PALETTE.filter((c) => !recent.has(c.toLowerCase()) && !usedByOthers.has(c.toLowerCase()));
     const next = pickRandom(candidates.length ? candidates : TITLEBAR_COLOR_PALETTE);
     const nextHistory = [next, ...history.filter((c) => c.toLowerCase() !== next.toLowerCase())].slice(0, 25);
     await context.workspaceState.update(WORKSPACE_TITLEBAR_COLOR_HISTORY_KEY, nextHistory);
@@ -3570,6 +3881,10 @@ async function ensureWorkspaceTitlebarColor(context, forceNew = false) {
         color = await pickNextTitlebarColor(context);
         await context.workspaceState.update(WORKSPACE_TITLEBAR_COLOR_KEY, color);
     }
+    // Update global color map for cross-instance uniqueness
+    const globalMap = getTitlebarColorGlobalMap(context);
+    globalMap[workspaceFolder.uri.fsPath] = color;
+    await setTitlebarColorGlobalMap(context, globalMap);
     await applyWorkspaceTitlebarColor(color);
 }
 function pickGitHubRemoteUrl(remotes) {
