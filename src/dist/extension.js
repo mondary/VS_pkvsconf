@@ -2646,6 +2646,12 @@ class ProjectNotesViewProvider {
                 await safeWriteTextFile(notesPath, message.content);
             }
         });
+        // Re-render when visibility changes to preserve state
+        webviewView.onDidChangeVisibility(() => {
+            if (webviewView.visible) {
+                void this.render(webviewView);
+            }
+        });
         await this.render(webviewView);
     }
     async render(view) {

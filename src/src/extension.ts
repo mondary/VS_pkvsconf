@@ -2866,6 +2866,13 @@ class ProjectNotesViewProvider implements vscode.WebviewViewProvider {
       }
     });
 
+    // Re-render when visibility changes to preserve state
+    webviewView.onDidChangeVisibility(() => {
+      if (webviewView.visible) {
+        void this.render(webviewView);
+      }
+    });
+
     await this.render(webviewView);
   }
 
