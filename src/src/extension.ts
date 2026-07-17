@@ -977,6 +977,7 @@ async function buildLaunchpadHtml(webview: vscode.Webview, projects: LaunchpadPr
   );
 
   const viewMode = getLaunchpadViewMode();
+  const sidebarIconSize = vscode.workspace.getConfiguration("pkvsconf").get<number>("launchpad.sidebarIconSize") ?? 72;
 
   const gridCardsHtml = cards
     .map(
@@ -1086,8 +1087,8 @@ async function buildLaunchpadHtml(webview: vscode.Webview, projects: LaunchpadPr
           box-shadow: 0 8px 18px rgba(0,0,0,0.12);
         }
         .card img {
-          width: 72px;
-          height: 72px;
+          width: ${sidebarIconSize}px;
+          height: ${sidebarIconSize}px;
           object-fit: contain;
           border-radius: 10px;
           background: transparent;
@@ -1193,6 +1194,23 @@ async function buildLaunchpadHtml(webview: vscode.Webview, projects: LaunchpadPr
           color: var(--vscode-descriptionForeground);
           white-space: nowrap;
         }
+        .iconSizeControl {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          font-size: 11px;
+          color: var(--vscode-descriptionForeground);
+        }
+        .iconSizeControl input[type="range"] {
+          width: 60px;
+          height: 12px;
+          cursor: pointer;
+          accent-color: var(--vscode-focusBorder);
+        }
+        .iconSizeValue {
+          min-width: 24px;
+          text-align: right;
+        }
       </style>
     </head>
     <body>
@@ -1200,6 +1218,10 @@ async function buildLaunchpadHtml(webview: vscode.Webview, projects: LaunchpadPr
         <div class="topbar">
           <div class="title">Projets (${viewMode === "mini" ? "mini" : "grille"})</div>
           <div class="actions">
+            <div class="iconSizeControl">
+              <input type="range" id="iconSizeSlider" min="32" max="128" value="${sidebarIconSize}" />
+              <span id="iconSizeValue" class="iconSizeValue">${sidebarIconSize}</span>
+            </div>
             <button id="toggleBtn" class="iconBtn" type="button" aria-label="Basculer le mode d'affichage" title="Basculer le mode">≡</button>
             <button id="addBtn" class="iconBtn" type="button" aria-label="Ajouter un projet au Launchpad" title="Ajouter un projet">+</button>
           </div>
@@ -1252,6 +1274,26 @@ async function buildLaunchpadHtml(webview: vscode.Webview, projects: LaunchpadPr
             e.preventDefault();
             vscode.postMessage({ command: 'reveal', path: el.dataset.path });
           });
+        });
+
+        // Icon size slider
+        const iconSizeSlider = document.getElementById('iconSizeSlider');
+        const iconSizeValue = document.getElementById('iconSizeValue');
+        let iconSizeTimer = null;
+
+        iconSizeSlider?.addEventListener('input', () => {
+          const size = parseInt(iconSizeSlider.value);
+          iconSizeValue.textContent = size;
+          // Update CSS variables
+          document.querySelectorAll('.card img').forEach(img => {
+            img.style.width = size + 'px';
+            img.style.height = size + 'px';
+          });
+          // Debounced save to config
+          if (iconSizeTimer) clearTimeout(iconSizeTimer);
+          iconSizeTimer = setTimeout(() => {
+            vscode.postMessage({ command: 'updateIconSize', size });
+          }, 500);
         });
       </script>
     </body>
@@ -2658,6 +2700,8 @@ class LaunchpadWebviewProvider implements vscode.WebviewViewProvider {
         const nextMode = getLaunchpadViewMode() === "mini" ? "grid" : "mini";
         await setLaunchpadViewMode(nextMode);
         await this.render(webviewView);
+      } else if (message.command === "updateIconSize" && typeof message.size === "number") {
+        await vscode.workspace.getConfiguration("pkvsconf").update("launchpad.sidebarIconSize", message.size, vscode.ConfigurationTarget.Global);
       }
     });
 
