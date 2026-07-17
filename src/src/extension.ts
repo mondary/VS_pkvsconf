@@ -4223,8 +4223,93 @@ async function getGitHubRepoUrlFromRoot(
   return undefined;
 }
 
+class GitignoreDecorationProvider implements vscode.FileDecorationProvider {
+  private ignoredPaths = new Set<string>();
+  private _onDidChangeFileDecorations = new vscode.EventEmitter<
+    vscode.Uri | vscode.Uri[] | undefined
+  >();
+  readonly onDidChangeFileDecorations = this._onDidChangeFileDecorations.event;
+
+  constructor(private workspaceRoot: string) {}
+
+  private execGit(cmd: string): Promise<string> {
+    return new Promise((resolve) => {
+      cp.exec(
+        cmd,
+        { cwd: this.workspaceRoot, maxBuffer: 50 * 1024 * 1024 },
+        (_err, stdout) => {
+          resolve(stdout || "");
+        }
+      );
+    });
+  }
+
+  async refresh(): Promise<void> {
+    const root = this.workspaceRoot;
+    const newSet = new Set<string>();
+
+    const out = await this.execGit(
+      "git ls-files --others -i --exclude-standard --directory"
+    );
+
+    for (const line of out.split("\n")) {
+      const p = line.trim().replace(/\/+$/, "");
+      if (p) {
+        newSet.add(path.join(root, p));
+      }
+    }
+
+    this.ignoredPaths = newSet;
+    this._onDidChangeFileDecorations.fire(undefined);
+  }
+
+  provideFileDecoration(uri: vscode.Uri): vscode.FileDecoration | undefined {
+    if (this.ignoredPaths.has(uri.fsPath)) {
+      return {
+        badge: "⊘",
+        tooltip: "Ignoré par Git (.gitignore)",
+        color: new vscode.ThemeColor("gitDecoration.ignoredResourceForeground"),
+      };
+    }
+    return undefined;
+  }
+}
+
 export function activate(context: vscode.ExtensionContext) {
   registerKanban(context);
+
+  // Gitignore decoration provider
+  const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  if (workspaceRoot) {
+    const gitignoreProvider = new GitignoreDecorationProvider(workspaceRoot);
+    context.subscriptions.push(
+      vscode.window.registerFileDecorationProvider(gitignoreProvider)
+    );
+
+    void gitignoreProvider.refresh();
+
+    const gitignoreWatcher = vscode.workspace.createFileSystemWatcher(
+      "**/.gitignore"
+    );
+    gitignoreWatcher.onDidChange(() => void gitignoreProvider.refresh());
+    gitignoreWatcher.onDidCreate(() => void gitignoreProvider.refresh());
+    gitignoreWatcher.onDidDelete(() => void gitignoreProvider.refresh());
+    context.subscriptions.push(gitignoreWatcher);
+
+    // Refresh when files are created/deleted (new files may match ignore patterns)
+    const fileWatcher = vscode.workspace.createFileSystemWatcher("**/*");
+    let debounceTimer: NodeJS.Timeout | undefined;
+    fileWatcher.onDidCreate(() => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => void gitignoreProvider.refresh(), 500);
+    });
+    fileWatcher.onDidDelete(() => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => void gitignoreProvider.refresh(), 500);
+    });
+    context.subscriptions.push(fileWatcher);
+  }
+
   const provider = new ProjectIconViewProvider();
   let watcher: vscode.FileSystemWatcher | undefined;
   const tagsStore = new ExtensionTagsStore(context);
