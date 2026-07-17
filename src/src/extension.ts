@@ -1194,21 +1194,24 @@ async function buildLaunchpadHtml(webview: vscode.Webview, projects: LaunchpadPr
           color: var(--vscode-descriptionForeground);
           white-space: nowrap;
         }
-        .iconSizeControl {
+        .iconSizeBar {
           display: flex;
           align-items: center;
-          gap: 4px;
-          font-size: 11px;
-          color: var(--vscode-descriptionForeground);
+          gap: 8px;
+          margin-top: 10px;
+          padding: 6px 0;
+          border-top: 1px solid var(--vscode-editorWidget-border, #4444);
         }
-        .iconSizeControl input[type="range"] {
-          width: 60px;
+        .iconSizeBar input[type="range"] {
+          flex: 1;
           height: 12px;
           cursor: pointer;
           accent-color: var(--vscode-focusBorder);
         }
-        .iconSizeValue {
-          min-width: 24px;
+        .iconSizeBar .iconSizeValue {
+          font-size: 11px;
+          color: var(--vscode-descriptionForeground);
+          min-width: 32px;
           text-align: right;
         }
       </style>
@@ -1218,10 +1221,6 @@ async function buildLaunchpadHtml(webview: vscode.Webview, projects: LaunchpadPr
         <div class="topbar">
           <div class="title">Projets (${viewMode === "mini" ? "mini" : "grille"})</div>
           <div class="actions">
-            <div class="iconSizeControl">
-              <input type="range" id="iconSizeSlider" min="32" max="128" value="${sidebarIconSize}" />
-              <span id="iconSizeValue" class="iconSizeValue">${sidebarIconSize}</span>
-            </div>
             <button id="toggleBtn" class="iconBtn" type="button" aria-label="Basculer le mode d'affichage" title="Basculer le mode">≡</button>
             <button id="addBtn" class="iconBtn" type="button" aria-label="Ajouter un projet au Launchpad" title="Ajouter un projet">+</button>
           </div>
@@ -1239,6 +1238,10 @@ async function buildLaunchpadHtml(webview: vscode.Webview, projects: LaunchpadPr
                 ${gridCardsHtml}
               </div>`
         }
+        <div class="iconSizeBar">
+          <input type="range" id="iconSizeSlider" min="32" max="128" value="${sidebarIconSize}" />
+          <span id="iconSizeValue" class="iconSizeValue">${sidebarIconSize}px</span>
+        </div>
       </div>
       <script nonce="${nonce}">
         const vscode = acquireVsCodeApi();
