@@ -3691,9 +3691,8 @@ class GitignoreDecorationProvider {
     provideFileDecoration(uri) {
         if (this.ignoredPaths.has(uri.fsPath)) {
             return {
-                badge: "⊘",
+                badge: "⛔",
                 tooltip: "Ignoré par Git (.gitignore)",
-                color: new vscode.ThemeColor("gitDecoration.ignoredResourceForeground"),
             };
         }
         return undefined;
