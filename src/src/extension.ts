@@ -2435,74 +2435,30 @@ async function buildProjectNotesHtml(webview: vscode.Webview, initialContent: st
         .iconBtn:hover {
           background: var(--vscode-list-hoverBackground);
         }
-        .preview {
-          display: none;
-          width: 100%;
-          min-height: 240px;
-          height: calc(100vh - 70px);
-          overflow-y: auto;
-          box-sizing: border-box;
-          background: var(--vscode-editor-background);
-          border-radius: 12px;
-          padding: 10px;
-          font-size: 12px;
-          line-height: 1.6;
-        }
-        .preview.active {
-          display: block;
-        }
-        textarea.hidden {
-          display: none;
-        }
-        .previewLine {
-          padding: 2px 0;
-        }
-        .previewLine.checkbox {
-          display: flex;
-          align-items: flex-start;
-          gap: 6px;
-        }
-        .previewLine.checkbox input[type="checkbox"] {
-          margin-top: 3px;
-          cursor: pointer;
-          accent-color: var(--vscode-focusBorder);
-        }
-        .previewLine.checkbox label {
-          cursor: pointer;
-          user-select: none;
-        }
-        .previewLine.checkbox input:checked + label {
-          text-decoration: line-through;
-          opacity: 0.6;
-        }
-        details.hiddenNotes {
+        .hiddenNotesContainer {
           margin-top: 8px;
           border-top: 1px solid var(--vscode-editorWidget-border, #4444);
           padding-top: 6px;
         }
-        details.hiddenNotes summary {
+        .hiddenNotesContainer .header {
           font-size: 11px;
           color: var(--vscode-descriptionForeground);
-          cursor: pointer;
-          user-select: none;
           padding: 4px 0;
+          margin-bottom: 4px;
         }
-        details.hiddenNotes summary:hover {
-          color: var(--vscode-foreground);
-        }
-        details.hiddenNotes .hiddenItem {
-          opacity: 0.5;
+        .hiddenNotesContainer .hiddenItem {
+          opacity: 0.6;
           padding: 2px 0;
           display: flex;
           align-items: flex-start;
           gap: 6px;
         }
-        details.hiddenNotes .hiddenItem input[type="checkbox"] {
+        .hiddenNotesContainer .hiddenItem input[type="checkbox"] {
           margin-top: 3px;
           cursor: pointer;
           accent-color: var(--vscode-focusBorder);
         }
-        details.hiddenNotes .hiddenItem label {
+        .hiddenNotesContainer .hiddenItem label {
           cursor: pointer;
           user-select: none;
           text-decoration: line-through;
@@ -2513,11 +2469,11 @@ async function buildProjectNotesHtml(webview: vscode.Webview, initialContent: st
       <div class="topbar">
         <div class="title" title="${filePath}">${path.basename(filePath)}</div>
         <div class="actions">
-          <button id="togglePreview" class="iconBtn" type="button" aria-label="Basculer aperçu" title="Basculer aperçu">👁</button>
+          <button id="toggleHidden" class="iconBtn" type="button" aria-label="Afficher les notes masquées" title="Notes masquées">☑</button>
         </div>
       </div>
       <textarea id="notes" spellcheck="false" placeholder="Notes du projet (Markdown OK)…">${escaped}</textarea>
-      <div id="preview" class="preview"></div>
+      <div id="hiddenNotes" class="hiddenNotesContainer" style="display: none;"></div>
       <div id="saveIndicator" class="saveIndicator">✓ Sauvé</div>
       <script nonce="${nonce}">
         const vscode = acquireVsCodeApi();
@@ -2580,6 +2536,7 @@ async function buildProjectNotesHtml(webview: vscode.Webview, initialContent: st
           t = setTimeout(() => {
             vscode.postMessage({ command: 'save', content: el.value });
             showSaveIndicator();
+            renderHiddenNotes();
           }, 350);
         });
 
@@ -2589,112 +2546,74 @@ async function buildProjectNotesHtml(webview: vscode.Webview, initialContent: st
           showSaveIndicator();
         });
 
-        // Preview mode
-        const preview = document.getElementById('preview');
-        const toggleBtn = document.getElementById('togglePreview');
-        let previewMode = false;
+        // Hidden notes
+        const hiddenContainer = document.getElementById('hiddenNotes');
+        const toggleBtn = document.getElementById('toggleHidden');
+        let hiddenVisible = false;
 
         function escapeHtml(text) {
           return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
         }
 
-        function renderPreview() {
+        function renderHiddenNotes() {
           const lines = el.value.split('\\n');
-          const activeLines = [];
           const hiddenLines = [];
 
           lines.forEach((line, idx) => {
-            const checkboxMatch = line.match(/^(\\s*)- \\[([ xX])\\] (.*)$/);
-            if (checkboxMatch) {
-              const indent = checkboxMatch[1];
-              const checked = checkboxMatch[2] !== ' ';
-              const text = checkboxMatch[3];
-              if (checked) {
-                hiddenLines.push({ idx, indent, text, checked });
-              } else {
-                activeLines.push({ idx, indent, text, checked, isCheckbox: true });
-              }
-            } else {
-              activeLines.push({ idx, line, isCheckbox: false });
+            const match = line.match(/^(\\s*)- \\[x\\] (.*)$/i);
+            if (match) {
+              hiddenLines.push({ idx, text: match[2] });
             }
           });
 
-          let html = '';
-
-          // Active lines
-          activeLines.forEach(item => {
-            if (item.isCheckbox) {
-              html += '<div class="previewLine checkbox">';
-              html += '<input type="checkbox" data-line="' + item.idx + '"' + (item.checked ? ' checked' : '') + ' />';
-              html += '<label>' + escapeHtml(item.text) + '</label>';
-              html += '</div>';
-            } else {
-              const trimmed = item.line.trim();
-              if (trimmed.startsWith('# ')) {
-                html += '<div class="previewLine"><strong>' + escapeHtml(trimmed.slice(2)) + '</strong></div>';
-              } else if (trimmed.startsWith('## ')) {
-                html += '<div class="previewLine"><strong>' + escapeHtml(trimmed.slice(3)) + '</strong></div>';
-              } else if (trimmed.startsWith('### ')) {
-                html += '<div class="previewLine"><strong>' + escapeHtml(trimmed.slice(4)) + '</strong></div>';
-              } else if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
-                html += '<div class="previewLine">• ' + escapeHtml(trimmed.slice(2)) + '</div>';
-              } else if (trimmed === '') {
-                html += '<div class="previewLine">&nbsp;</div>';
-              } else {
-                html += '<div class="previewLine">' + escapeHtml(item.line) + '</div>';
-              }
-            }
-          });
-
-          // Hidden lines (checked checkboxes)
-          if (hiddenLines.length > 0) {
-            html += '<details class="hiddenNotes">';
-            html += '<summary>Notes masquées (' + hiddenLines.length + ')</summary>';
-            hiddenLines.forEach(item => {
-              html += '<div class="hiddenItem">';
-              html += '<input type="checkbox" data-line="' + item.idx + '" checked />';
-              html += '<label>' + escapeHtml(item.text) + '</label>';
-              html += '</div>';
-            });
-            html += '</details>';
+          if (hiddenLines.length === 0) {
+            hiddenContainer.style.display = 'none';
+            toggleBtn.style.display = 'none';
+            return;
           }
 
-          preview.innerHTML = html;
+          toggleBtn.style.display = '';
+          if (!hiddenVisible) {
+            hiddenContainer.style.display = 'none';
+            return;
+          }
 
-          // Add checkbox click handlers
-          preview.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+          let html = '<div class="header">Notes masquées (' + hiddenLines.length + ')</div>';
+          hiddenLines.forEach(item => {
+            html += '<div class="hiddenItem">';
+            html += '<input type="checkbox" data-line="' + item.idx + '" checked />';
+            html += '<label>' + escapeHtml(item.text) + '</label>';
+            html += '</div>';
+          });
+
+          hiddenContainer.innerHTML = html;
+          hiddenContainer.style.display = 'block';
+
+          // Add checkbox handlers
+          hiddenContainer.querySelectorAll('input[type="checkbox"]').forEach(cb => {
             cb.addEventListener('change', () => {
               const lineIdx = parseInt(cb.dataset.line);
               const lines = el.value.split('\\n');
               const line = lines[lineIdx];
-              const match = line.match(/^(\\s*)- \\[([ xX])\\] (.*)$/);
+              const match = line.match(/^(\\s*)- \\[x\\] (.*)$/i);
               if (match) {
-                const newChecked = cb.checked ? 'x' : ' ';
-                lines[lineIdx] = match[1] + '- [' + newChecked + '] ' + match[3];
+                lines[lineIdx] = match[1] + '- [ ] ' + match[2];
                 el.value = lines.join('\\n');
                 vscode.postMessage({ command: 'save', content: el.value });
                 showSaveIndicator();
-                renderPreview();
+                renderHiddenNotes();
               }
             });
           });
         }
 
         toggleBtn.addEventListener('click', () => {
-          previewMode = !previewMode;
-          if (previewMode) {
-            el.classList.add('hidden');
-            preview.classList.add('active');
-            toggleBtn.textContent = '✏';
-            toggleBtn.title = 'Basculer édition';
-            renderPreview();
-          } else {
-            el.classList.remove('hidden');
-            preview.classList.remove('active');
-            toggleBtn.textContent = '👁';
-            toggleBtn.title = 'Basculer aperçu';
-          }
+          hiddenVisible = !hiddenVisible;
+          renderHiddenNotes();
         });
+
+        // Initial render
+        renderHiddenNotes();
       </script>
     </body>
   </html>`;
