@@ -2315,6 +2315,22 @@ async function buildProjectNotesHtml(webview, initialContent, filePath) {
           el.dispatchEvent(new Event('input', { bubbles: true }));
         });
 
+        // () → checkbox shortcut
+        el.addEventListener('keydown', (e) => {
+          if (e.key !== ')') return;
+          const start = el.selectionStart;
+          const value = el.value;
+          if (start < 1 || value[start - 1] !== '(') return;
+          e.preventDefault();
+          const before = value.slice(0, start - 1);
+          const after = value.slice(start + 1);
+          el.value = before + '- [ ] ' + after;
+          const newPos = before.length + 6;
+          el.selectionStart = newPos;
+          el.selectionEnd = newPos;
+          el.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+
         let t = null;
         const indicator = document.getElementById('saveIndicator');
         let indicatorTimer = null;
