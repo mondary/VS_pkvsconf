@@ -6,7 +6,7 @@ Toutes les modifications notables de **VS_pkvsconf** sont documentées ici.
 
 ## TODO — Roadmap
 
-Statut : `2.2026.12`
+Statut : `2.2026.14`
 
 ### Feature 1 — Add to .gitignore ✅
 - [x] Commande « ⛔ Ajouter au .gitignore » au clic droit explorer
@@ -43,6 +43,11 @@ Statut : `2.2026.12`
 ---
 
 ## Releases
+
+### [2.2026.14] - 2026-07-18
+#### Fixed
+- ⛔ Ajout au `.gitignore` : les fichiers sont désormais ajoutés sans slash final, afin que Git les ignore correctement.
+- 🔄 Décorations Git : le badge des fichiers ignorés est rafraîchi immédiatement après l'ajout.
 
 ### [2.2026.12] - 2026-07-17
 #### Fixed

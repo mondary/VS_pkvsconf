@@ -85,7 +85,7 @@ npx @vscode/vsce package --allow-missing-repository
 
 - Palette de commandes : "Extensions: Install from VSIX..."
 - Sélectionner le fichier `.vsix` dans `release/`
-- Ou en CLI : `code --install-extension release/vs-pkvsconf-2.2026.12.vsix --force`
+- Ou en CLI : `code --install-extension release/vs-pkvsconf-2.2026.14.vsix --force`
 - Recharger la fenêtre
 
 ## 📋 Changelog

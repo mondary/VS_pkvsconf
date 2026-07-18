@@ -4711,20 +4711,22 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Gitignore decoration provider
   const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  let gitignoreProvider: GitignoreDecorationProvider | undefined;
   if (workspaceRoot) {
-    const gitignoreProvider = new GitignoreDecorationProvider(workspaceRoot);
+    const decorationProvider = new GitignoreDecorationProvider(workspaceRoot);
+    gitignoreProvider = decorationProvider;
     context.subscriptions.push(
-      vscode.window.registerFileDecorationProvider(gitignoreProvider)
+      vscode.window.registerFileDecorationProvider(decorationProvider)
     );
 
-    void gitignoreProvider.refresh();
+    void decorationProvider.refresh();
 
     const gitignoreWatcher = vscode.workspace.createFileSystemWatcher(
       "**/.gitignore"
     );
-    gitignoreWatcher.onDidChange(() => void gitignoreProvider.refresh());
-    gitignoreWatcher.onDidCreate(() => void gitignoreProvider.refresh());
-    gitignoreWatcher.onDidDelete(() => void gitignoreProvider.refresh());
+    gitignoreWatcher.onDidChange(() => void decorationProvider.refresh());
+    gitignoreWatcher.onDidCreate(() => void decorationProvider.refresh());
+    gitignoreWatcher.onDidDelete(() => void decorationProvider.refresh());
     context.subscriptions.push(gitignoreWatcher);
 
     // Refresh when files are created/deleted (new files may match ignore patterns)
@@ -4732,11 +4734,11 @@ export function activate(context: vscode.ExtensionContext) {
     let debounceTimer: NodeJS.Timeout | undefined;
     fileWatcher.onDidCreate(() => {
       clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(() => void gitignoreProvider.refresh(), 500);
+      debounceTimer = setTimeout(() => void decorationProvider.refresh(), 500);
     });
     fileWatcher.onDidDelete(() => {
       clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(() => void gitignoreProvider.refresh(), 500);
+      debounceTimer = setTimeout(() => void decorationProvider.refresh(), 500);
     });
     context.subscriptions.push(fileWatcher);
   }
@@ -6120,7 +6122,8 @@ export function activate(context: vscode.ExtensionContext) {
       const workspaceRoot = workspaceFolder.uri.fsPath;
       const relativePath = path.relative(workspaceRoot, targetUri.fsPath).split(path.sep).join("/");
       const normalized = relativePath.replace(/\/+$/, "");
-      const entry = normalized.endsWith("/") ? normalized : `${normalized}/`;
+      const targetStat = await fs.stat(targetUri.fsPath);
+      const entry = targetStat.isDirectory() ? `${normalized}/` : normalized;
 
       const gitignorePath = path.join(workspaceRoot, ".gitignore");
       try {
@@ -6142,6 +6145,7 @@ export function activate(context: vscode.ExtensionContext) {
         const needsNewline = existing.length > 0 && !existing.endsWith("\n");
         const updated = `${existing}${needsNewline ? "\n" : ""}${entry}\n`;
         await fs.writeFile(gitignorePath, updated, "utf8");
+        await gitignoreProvider?.refresh();
         vscode.window.showInformationMessage(`${entry} ajouté au .gitignore.`);
       } catch (error) {
         vscode.window.showErrorMessage(`Erreur lors de l'ajout au .gitignore : ${error}`);
