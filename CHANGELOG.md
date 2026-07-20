@@ -6,7 +6,7 @@ Toutes les modifications notables de **VS_pkvsconf** sont documentées ici.
 
 ## TODO — Roadmap
 
-Statut : `2.2026.14`
+Statut : `2.2026.16`
 
 ### Feature 1 — Add to .gitignore ✅
 - [x] Commande « ⛔ Ajouter au .gitignore » au clic droit explorer
@@ -22,6 +22,15 @@ Statut : `2.2026.14`
 - [x] Boutons Launchpad déplacés vers la vue Project Icon
 - [x] Icônes codicons sur toutes les vues
 - [x] Champ de recherche dans la sidebar Launchpad
+
+### Favoris Launchpad ✅
+- [x] Champ `favorite` sur les projets Launchpad
+- [x] Tri favoris d'abord (sidebar, panel, QuickPick)
+- [x] Badge ★ doré sur les cards favorites (sidebar + panel)
+- [x] Commande « Launchpad: Basculer le statut favori » (palette + context menu)
+- [x] Raccourci `Cmd/Ctrl+Alt+Shift+S`
+- [x] Option « ★ Favoris » dans le sélecteur de tri
+- [x] Handler `toggleFavorite` dans le panel webview
 
 ### Notes ✅
 - [x] Auto-save renforcé (blur + indicateur "✓ Sauvé")

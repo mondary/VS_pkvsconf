@@ -2,7 +2,7 @@
   "name": "vs-pkvsconf",
   "displayName": "VS_pkvsconf",
   "description": "Adds a toolbar button in Explorer to reveal the active file in Finder.",
-  "version": "2.2026.14",
+  "version": "2.2026.16",
   "publisher": "Cmondary",
   "icon": "icon.png",
   "license": "MIT",
@@ -314,6 +314,11 @@
         "icon": "$(remove)"
       },
       {
+        "command": "pkvsconf.launchpadToggleFavorite",
+        "title": "Launchpad: Basculer le statut favori",
+        "icon": "$(star-full)"
+      },
+      {
         "command": "pkvsconf.agentHistoryAddFromClipboard",
         "title": "Agent History: Ajouter depuis le presse-papiers",
         "icon": "$(add)"
@@ -514,6 +519,11 @@
           "group": "navigation"
         },
         {
+          "command": "pkvsconf.launchpadToggleFavorite",
+          "when": "view == launchpadExplorerView && viewItem == launchpadProject",
+          "group": "inline"
+        },
+        {
           "command": "pkvsconf.launchpadRevealInFinder",
           "when": "view == launchpadExplorerView && viewItem == launchpadProject",
           "group": "inline"
@@ -571,6 +581,11 @@
         "command": "pkvsconf.launchpadRemove",
         "key": "ctrl+alt+shift+backspace",
         "mac": "cmd+alt+shift+backspace"
+      },
+      {
+        "command": "pkvsconf.launchpadToggleFavorite",
+        "key": "ctrl+alt+shift+s",
+        "mac": "cmd+alt+shift+s"
       },
       {
         "command": "pkvsconf.openInDefaultBrowser",

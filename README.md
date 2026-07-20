@@ -18,6 +18,7 @@
 - 🔐 Détection des secrets exposés
 - 🛡️ Blocage de commit avec secrets
 - 🚀 Launchpad projets (plein écran + liste + bascule rapide)
+- ⭐ Favoris Launchpad : épingler vos projets préférés en haut de la liste
 - 📋 Kanban TUI avec cartes Backlog, In Progress, In Review et Done
 - 🔗 Agent Skills : symlink `.agent` vers le dossier central `-agent`
 - ⛔ Ajouter au .gitignore (clic droit dans l'explorateur)
@@ -40,6 +41,7 @@
 - Secrets : scan workspace + blocage de commit si secrets staged.
 - Agent Skills : crée un lien symbolique `.agent` vers le dossier central `-agent`.
 - Launchpad : boutons dans la vue Project Icon pour ouvrir le plein écran et ajouter le projet courant. Raccourci `Cmd/Ctrl+Alt+L` pour la liste.
+- Favoris Launchpad : clic droit sur un projet → "★ Toggle Favori" ou raccourci `Cmd/Ctrl+Alt+Shift+S`. Les favoris apparaissent en haut de la grille et dans le QuickPick. Badge ★ doré sur les projets favoris.
 - Ordre des vues : `Launchpad Projets` apparaît avant `Project Icon` dans l'Explorer.
 - Kanban : bouton `Kanban` dans la barre de status. Chaque carte peut lancer ou reprendre une session OpenCode isolée dans `tmux`.
 - ⛔ Add to .gitignore : clic droit sur un fichier/dossier dans l'explorateur → ajout automatique au `.gitignore` (création si absent, dédoublonnage).
@@ -71,6 +73,7 @@ Les couleurs de la status bar utilisent :
 - Commit (vérification secrets)
 - Agent Skills
 - Ouvrir le Kanban des agents
+- Launchpad: Basculer le statut favori
 - ⛔ Ajouter au .gitignore
 
 ## 📦 Build & Package
@@ -85,7 +88,7 @@ npx @vscode/vsce package --allow-missing-repository
 
 - Palette de commandes : "Extensions: Install from VSIX..."
 - Sélectionner le fichier `.vsix` dans `release/`
-- Ou en CLI : `code --install-extension release/vs-pkvsconf-2.2026.14.vsix --force`
+- Ou en CLI : `code --install-extension release/vs-pkvsconf-2.2026.16.vsix --force`
 - Recharger la fenêtre
 
 ## 📋 Changelog

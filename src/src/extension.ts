@@ -382,6 +382,7 @@ type LaunchpadProject = {
   name: string;
   path: string;
   lastOpened?: number;
+  favorite?: boolean;
 };
 
 type LaunchpadCard = {
@@ -389,6 +390,7 @@ type LaunchpadCard = {
   path: string;
   icon: string;
   lastOpened?: number;
+  favorite?: boolean;
 };
 
 type LaunchpadLayoutSettings = {
@@ -763,11 +765,25 @@ async function recordLaunchpadOpen(projectPath: string) {
 function getSortedLaunchpadProjects(): LaunchpadProject[] {
   const projects = getLaunchpadProjects();
   return projects.sort((a, b) => {
+    const fa = a.favorite ? 1 : 0;
+    const fb = b.favorite ? 1 : 0;
+    if (fa !== fb) return fb - fa;
     const ta = a.lastOpened ?? 0;
     const tb = b.lastOpened ?? 0;
     if (ta !== tb) return tb - ta;
     return a.name.localeCompare(b.name);
   });
+}
+
+async function toggleProjectFavorite(projectPath: string): Promise<void> {
+  const projects = getLaunchpadProjects();
+  const normalized = path.normalize(projectPath);
+  const idx = projects.findIndex((p) => path.normalize(p.path) === normalized);
+  if (idx === -1) return;
+  projects[idx].favorite = !projects[idx].favorite;
+  await vscode.workspace
+    .getConfiguration("pkvsconf")
+    .update("launchpad.projects", projects, vscode.ConfigurationTarget.Global);
 }
 
 async function revealProjectInFinder(project?: LaunchpadProject) {
@@ -817,11 +833,12 @@ async function buildLaunchpadQuickPickItems(
 ): Promise<LaunchpadQuickPickItem[]> {
   return Promise.all(
     projects.map(async (project) => ({
-      label: project.name || path.basename(project.path),
+      label: (project.favorite ? "$(star-full) " : "") + (project.name || path.basename(project.path)),
       description: project.path,
-      detail: project.lastOpened
-        ? `Ouvert ${formatRelativeTime(project.lastOpened)}`
-        : undefined,
+      detail: [
+        project.favorite ? "Favori" : undefined,
+        project.lastOpened ? `Ouvert ${formatRelativeTime(project.lastOpened)}` : undefined
+      ].filter(Boolean).join(" · ") || undefined,
       project,
       iconPath: await getProjectIconFileUri(project)
     }))
@@ -973,7 +990,8 @@ async function buildLaunchpadHtml(webview: vscode.Webview, projects: LaunchpadPr
       name: p.name || path.basename(p.path),
       path: p.path,
       icon: await getProjectIcon(p),
-      lastOpened: p.lastOpened
+      lastOpened: p.lastOpened,
+      favorite: p.favorite
     }))
   );
 
@@ -986,10 +1004,13 @@ async function buildLaunchpadHtml(webview: vscode.Webview, projects: LaunchpadPr
   const gridCardsHtml = cards
     .map(
       (c, index) => {
-        const title = `${c.name}${c.lastOpened ? " - " + formatRelativeTime(c.lastOpened) : ""}`;
+        const title = `${c.name}${c.favorite ? " ★" : ""}${c.lastOpened ? " - " + formatRelativeTime(c.lastOpened) : ""}`;
         return `
-        <button class="card${c.lastOpened ? ' recent' : ''}" data-path="${escapeAttr(c.path)}" data-name="${escapeAttr(c.name)}" data-last-opened="${c.lastOpened || 0}" data-index="${index}" title="${escapeAttr(title)}">
-          <img src="${escapeAttr(c.icon)}" alt="${escapeAttr(c.name)}" />
+        <button class="card${c.lastOpened ? ' recent' : ''}${c.favorite ? ' favorite' : ''}" data-path="${escapeAttr(c.path)}" data-name="${escapeAttr(c.name)}" data-last-opened="${c.lastOpened || 0}" data-favorite="${c.favorite ? '1' : '0'}" data-index="${index}" title="${escapeAttr(title)}">
+          <div class="cardIconWrap">
+            <img src="${escapeAttr(c.icon)}" alt="${escapeAttr(c.name)}" />
+            ${c.favorite ? '<span class="favOverlay">★</span>' : ''}
+          </div>
           <div class="name">${escapeHtml(c.name)}</div>
           ${c.lastOpened ? '<div class="badge recent">récent</div>' : ''}
         </button>`;
@@ -1000,10 +1021,13 @@ async function buildLaunchpadHtml(webview: vscode.Webview, projects: LaunchpadPr
   const miniItemsHtml = cards
     .map(
       (c, index) => {
-        const title = `${c.name}${c.lastOpened ? " - " + formatRelativeTime(c.lastOpened) : ""}`;
+        const title = `${c.name}${c.favorite ? " ★" : ""}${c.lastOpened ? " - " + formatRelativeTime(c.lastOpened) : ""}`;
         return `
-        <button class="miniItem${c.lastOpened ? ' recent' : ''}" data-path="${escapeAttr(c.path)}" data-name="${escapeAttr(c.name)}" data-last-opened="${c.lastOpened || 0}" data-index="${index}" type="button" aria-label="${escapeAttr(c.name)}" title="${escapeAttr(title)}">
-          <img src="${escapeAttr(c.icon)}" alt="${escapeAttr(c.name)}" />
+        <button class="miniItem${c.lastOpened ? ' recent' : ''}${c.favorite ? ' favorite' : ''}" data-path="${escapeAttr(c.path)}" data-name="${escapeAttr(c.name)}" data-last-opened="${c.lastOpened || 0}" data-favorite="${c.favorite ? '1' : '0'}" data-index="${index}" type="button" aria-label="${escapeAttr(c.name)}" title="${escapeAttr(title)}">
+          <div class="miniIconWrap">
+            <img src="${escapeAttr(c.icon)}" alt="${escapeAttr(c.name)}" />
+            ${c.favorite ? '<span class="favOverlay">★</span>' : ''}
+          </div>
           ${c.lastOpened ? '<div class="miniBadge recent">●</div>' : ''}
         </button>`;
       }
@@ -1181,8 +1205,40 @@ async function buildLaunchpadHtml(webview: vscode.Webview, projects: LaunchpadPr
           margin-top: 2px;
           opacity: 0.7;
         }
+        .cardIconWrap {
+          position: relative;
+          display: inline-block;
+        }
+        .cardIconWrap img {
+          display: block;
+        }
+        .favOverlay {
+          position: absolute;
+          top: -2px;
+          right: -2px;
+          font-size: 11px;
+          color: #f5c518;
+          text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+          line-height: 1;
+          pointer-events: none;
+        }
+        .card.favorite {
+          border: 1px solid rgba(245, 197, 24, 0.35);
+        }
         .miniItem.recent {
           position: relative;
+        }
+        .miniIconWrap {
+          position: relative;
+          display: inline-block;
+        }
+        .miniIconWrap img {
+          display: block;
+        }
+        .miniIconWrap .favOverlay {
+          font-size: 9px;
+          top: -2px;
+          right: -2px;
         }
         .miniBadge.recent {
           position: absolute;
@@ -1191,6 +1247,18 @@ async function buildLaunchpadHtml(webview: vscode.Webview, projects: LaunchpadPr
           font-size: 6px;
           color: var(--vscode-terminal-ansiGreen, #4ec9b0);
           line-height: 1;
+        }
+        .favSeparator {
+          grid-column: 1 / -1;
+          font-size: 8px;
+          text-transform: uppercase;
+          letter-spacing: 1px;
+          color: var(--vscode-descriptionForeground);
+          padding: 0 4px;
+          margin: 0;
+          border-bottom: 1px solid var(--vscode-widget-border, rgba(255,255,255,0.06));
+          opacity: 0.4;
+          line-height: 16px;
         }
         .searchBar {
           display: flex;
@@ -1247,6 +1315,7 @@ async function buildLaunchpadHtml(webview: vscode.Webview, projects: LaunchpadPr
           <div class="title">Projets</div>
           <div class="actions">
             <select id="sortSelect" class="sortSelect" aria-label="Trier les projets">
+              <option value="favorites">★ Favoris</option>
               <option value="alpha">A → Z</option>
               <option value="recent">Récents</option>
             </select>
@@ -1295,17 +1364,41 @@ async function buildLaunchpadHtml(webview: vscode.Webview, projects: LaunchpadPr
         function sortItems(mode) {
           if (!gridEl) return;
           const sorted = [...items];
-          if (mode === 'alpha') {
-            sorted.sort((a, b) => (a.dataset.name || '').localeCompare(b.dataset.name || ''));
-          } else if (mode === 'recent') {
+          if (mode === 'favorites') {
             sorted.sort((a, b) => {
+              const fa = parseInt(a.dataset.favorite || '0', 10);
+              const fb = parseInt(b.dataset.favorite || '0', 10);
+              if (fa !== fb) return fb - fa;
               const ta = parseInt(a.dataset.lastOpened || '0', 10);
               const tb = parseInt(b.dataset.lastOpened || '0', 10);
               if (ta !== tb) return tb - ta;
               return (a.dataset.name || '').localeCompare(b.dataset.name || '');
             });
+            gridEl.querySelectorAll('.favSepRest').forEach(s => s.remove());
+            const firstNonFav = sorted.findIndex(el => el.dataset.favorite !== '1');
+            sorted.forEach((el, i) => {
+              if (firstNonFav === i) {
+                const s = document.createElement('div');
+                s.className = 'favSeparator favSepRest';
+                s.textContent = 'Projets';
+                gridEl.appendChild(s);
+              }
+              gridEl.appendChild(el);
+            });
+          } else {
+            gridEl.querySelectorAll('.favSepRest').forEach(s => s.remove());
+            if (mode === 'alpha') {
+              sorted.sort((a, b) => (a.dataset.name || '').localeCompare(b.dataset.name || ''));
+            } else if (mode === 'recent') {
+              sorted.sort((a, b) => {
+                const ta = parseInt(a.dataset.lastOpened || '0', 10);
+                const tb = parseInt(b.dataset.lastOpened || '0', 10);
+                if (ta !== tb) return tb - ta;
+                return (a.dataset.name || '').localeCompare(b.dataset.name || '');
+              });
+            }
+            sorted.forEach(el => gridEl.appendChild(el));
           }
-          sorted.forEach(el => gridEl.appendChild(el));
         }
 
         function filterItems() {
@@ -1379,7 +1472,8 @@ async function buildLaunchpadPanelHtml(
       name: p.name || path.basename(p.path),
       path: p.path,
       icon: await getProjectIcon(p),
-      lastOpened: p.lastOpened
+      lastOpened: p.lastOpened,
+      favorite: p.favorite
     }))
   );
   const nonce = getNonce();
@@ -1389,12 +1483,13 @@ async function buildLaunchpadPanelHtml(
 
   const cardsHtml = cards
     .map((c, index) => {
-      const title = `${c.name}\n${c.path}${c.lastOpened ? "\nOuvert " + formatRelativeTime(c.lastOpened) : ""}`;
+      const title = `${c.name}\n${c.path}${c.favorite ? "\n★ Favori" : ""}${c.lastOpened ? "\nOuvert " + formatRelativeTime(c.lastOpened) : ""}`;
       const initials = c.name.trim().slice(0, 2).toUpperCase();
       return `
-        <button class="app${c.lastOpened ? ' recent' : ''}" type="button" data-index="${index}" data-path="${escapeAttr(c.path)}" data-name="${escapeAttr(c.name.toLowerCase())}" data-last-opened="${c.lastOpened || 0}" title="${escapeAttr(title)}">
+        <button class="app${c.lastOpened ? ' recent' : ''}${c.favorite ? ' favorite' : ''}" type="button" data-index="${index}" data-path="${escapeAttr(c.path)}" data-name="${escapeAttr(c.name.toLowerCase())}" data-last-opened="${c.lastOpened || 0}" data-favorite="${c.favorite ? '1' : '0'}" title="${escapeAttr(title)}">
           <span class="iconWrap">
             <img class="icon" src="${escapeAttr(c.icon)}" alt="${escapeAttr(c.name)}" />
+            ${c.favorite ? '<span class="favOverlay">★</span>' : ''}
           </span>
           <span class="label">${escapeHtml(c.name || initials)}</span>
           ${c.lastOpened ? '<span class="lastOpened">recent</span>' : ""}
@@ -1673,6 +1768,7 @@ async function buildLaunchpadPanelHtml(
           align-items: center;
           justify-content: center;
           transition: transform 0.18s ease, filter 0.18s ease;
+          position: relative;
         }
         .app:hover .iconWrap,
         .app:focus-visible .iconWrap {
@@ -1684,6 +1780,16 @@ async function buildLaunchpadPanelHtml(
           height: calc(var(--icon-size) * 0.82);
           object-fit: contain;
           border-radius: 0;
+        }
+        .favOverlay {
+          position: absolute;
+          top: 2px;
+          right: 2px;
+          font-size: 16px;
+          color: #f5c518;
+          text-shadow: 0 1px 4px rgba(0,0,0,0.5);
+          line-height: 1;
+          pointer-events: none;
         }
         .label {
           display: block;
@@ -1701,6 +1807,29 @@ async function buildLaunchpadPanelHtml(
           font-size: 10px;
           text-transform: uppercase;
           letter-spacing: 0.9px;
+        }
+        .app.favorite {
+          border-color: rgba(245, 197, 24, 0.4);
+        }
+        .favSeparator {
+          grid-column: 1 / -1;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          font-size: 9px;
+          text-transform: uppercase;
+          letter-spacing: 1px;
+          color: var(--muted);
+          padding: 0;
+          margin: 0;
+          line-height: 18px;
+        }
+        .favSeparator::after {
+          content: '';
+          flex: 1;
+          height: 1px;
+          background: var(--panel-border);
+          opacity: 0.4;
         }
         .empty {
           align-self: center;
@@ -2118,6 +2247,7 @@ async function buildLaunchpadPanelHtml(
             <div class="sortWrap">
               <span class="sortLabel">Trier</span>
               <select id="sortSelect" class="sortSelect" aria-label="Trier les projets">
+                <option value="favorites">★ Favoris</option>
                 <option value="alpha">A → Z</option>
                 <option value="recent">Récents</option>
               </select>
@@ -2197,6 +2327,7 @@ ${shortcutsHtml}
       </div>
       <div id="contextMenu" class="contextMenu" role="menu" aria-hidden="true">
         <button id="contextOpen" type="button" role="menuitem">Ouvrir</button>
+        <button id="contextFavorite" type="button" role="menuitem">Ajouter aux favoris</button>
         <button id="contextReveal" type="button" role="menuitem">Afficher dans Finder</button>
         <button id="contextRemove" class="danger" type="button" role="menuitem">Retirer du Launchpad</button>
       </div>
@@ -2268,17 +2399,41 @@ ${shortcutsHtml}
         function sortApps(mode) {
           if (!appsGrid || !apps.length) return;
           const sorted = [...apps];
-          if (mode === 'alpha') {
-            sorted.sort((a, b) => (a.dataset.name || '').localeCompare(b.dataset.name || ''));
-          } else if (mode === 'recent') {
+          if (mode === 'favorites') {
             sorted.sort((a, b) => {
+              const fa = parseInt(a.dataset.favorite || '0', 10);
+              const fb = parseInt(b.dataset.favorite || '0', 10);
+              if (fa !== fb) return fb - fa;
               const ta = parseInt(a.dataset.lastOpened || '0', 10);
               const tb = parseInt(b.dataset.lastOpened || '0', 10);
               if (ta !== tb) return tb - ta;
               return (a.dataset.name || '').localeCompare(b.dataset.name || '');
             });
+            appsGrid.querySelectorAll('.favSepRest').forEach(s => s.remove());
+            const firstNonFav = sorted.findIndex(el => el.dataset.favorite !== '1');
+            sorted.forEach((el, i) => {
+              if (firstNonFav === i) {
+                const s = document.createElement('div');
+                s.className = 'favSeparator favSepRest';
+                s.textContent = 'Projets';
+                appsGrid.appendChild(s);
+              }
+              appsGrid.appendChild(el);
+            });
+          } else {
+            appsGrid.querySelectorAll('.favSepRest').forEach(s => s.remove());
+            if (mode === 'alpha') {
+              sorted.sort((a, b) => (a.dataset.name || '').localeCompare(b.dataset.name || ''));
+            } else if (mode === 'recent') {
+              sorted.sort((a, b) => {
+                const ta = parseInt(a.dataset.lastOpened || '0', 10);
+                const tb = parseInt(b.dataset.lastOpened || '0', 10);
+                if (ta !== tb) return tb - ta;
+                return (a.dataset.name || '').localeCompare(b.dataset.name || '');
+              });
+            }
+            sorted.forEach(el => appsGrid.appendChild(el));
           }
-          sorted.forEach(el => appsGrid.appendChild(el));
         }
 
         function applySearch() {
@@ -2315,6 +2470,10 @@ ${shortcutsHtml}
         function openContextMenu(event, path) {
           contextPath = path;
           if (!contextMenu) return;
+          const el = apps.find(a => a.dataset.path === path);
+          const isFav = el?.dataset.favorite === '1';
+          const favBtn = document.getElementById('contextFavorite');
+          if (favBtn) favBtn.textContent = isFav ? 'Retirer des favoris' : 'Ajouter aux favoris';
           contextMenu.style.left = Math.min(event.clientX, window.innerWidth - 176) + 'px';
           contextMenu.style.top = Math.min(event.clientY, window.innerHeight - 118) + 'px';
           contextMenu.classList.add('visible');
@@ -2387,6 +2546,10 @@ ${shortcutsHtml}
 
         contextOpen?.addEventListener('click', () => {
           if (contextPath) post('open', { path: contextPath });
+          closeContextMenu();
+        });
+        contextFavorite?.addEventListener('click', () => {
+          if (contextPath) post('toggleFavorite', { path: contextPath });
           closeContextMenu();
         });
         contextReveal?.addEventListener('click', () => {
@@ -2911,6 +3074,10 @@ class LaunchpadPanel {
         await this.render();
       } else if (message.command === "removePath" && typeof message.path === "string") {
         await removeProjectFromLaunchpadByPath(message.path);
+        await this.onDidChangeProjects();
+        await this.render();
+      } else if (message.command === "toggleFavorite" && typeof message.path === "string") {
+        await toggleProjectFavorite(message.path);
         await this.onDidChangeProjects();
         await this.render();
       } else if (message.command === "refresh") {
@@ -5183,6 +5350,16 @@ export function activate(context: vscode.ExtensionContext) {
     "pkvsconf.launchpadRevealInFinder",
     async (project?: LaunchpadProject) => {
       await revealProjectInFinder(project);
+    }
+  );
+
+  const launchpadToggleFavoriteCmd = vscode.commands.registerCommand(
+    "pkvsconf.launchpadToggleFavorite",
+    async (project?: LaunchpadProject) => {
+      const target = project ?? (await pickProjectForAction("Basculer le statut favori"));
+      if (!target) return;
+      await toggleProjectFavorite(target.path);
+      await refreshLaunchpadViews();
     }
   );
 
