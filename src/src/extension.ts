@@ -21,6 +21,8 @@ const TITLEBAR_COLOR_GLOBAL_MAP_KEY = "titlebarColorGlobalMap";
 const CODEX_RESUME_STORAGE_KEY = "codexResumeCommands";
 const AGENT_HISTORY_STORAGE_KEY = "agentHistory";
 const CODEX_HISTORY_LAST_TS_KEY = "codexHistoryLastTs";
+const PROJECT_AGENT_SESSIONS_FILE = "pkvsconf-agent-sessions.json";
+const PROJECT_AGENT_RESUMES_FILE = "pkvsconf-agent-resumes.md";
 const LAUNCHPAD_LAYOUT_DEFAULTS = {
   columns: 8,
   rows: 4,
@@ -40,6 +42,169 @@ type AgentHistoryEntry = {
   createdAt: number;
   lastRunAt?: number;
 };
+
+type ProjectAgentSession = {
+  id: string;
+  provider: AgentProviderId;
+  command: string;
+  label: string;
+  summary?: string;
+  createdAt: number;
+  updatedAt: number;
+  lastResumedAt?: number;
+};
+
+function getProjectAgentSessionPaths(workspaceRoot: string) {
+  const directory = path.join(workspaceRoot, ".vscode");
+  return {
+    directory,
+    sessions: path.join(directory, PROJECT_AGENT_SESSIONS_FILE),
+    resumes: path.join(directory, PROJECT_AGENT_RESUMES_FILE)
+  };
+}
+
+async function getProjectAgentSessions(workspaceRoot: string): Promise<ProjectAgentSession[]> {
+  const { sessions } = getProjectAgentSessionPaths(workspaceRoot);
+  try {
+    const raw = JSON.parse(await fs.readFile(sessions, "utf8")) as { sessions?: unknown };
+    if (!Array.isArray(raw.sessions)) return [];
+    return raw.sessions
+      .map((value) => value as Partial<ProjectAgentSession>)
+      .filter((value) =>
+        typeof value.id === "string" &&
+        typeof value.command === "string" &&
+        typeof value.label === "string" &&
+        typeof value.createdAt === "number" &&
+        typeof value.updatedAt === "number"
+      )
+      .map((value) => ({
+        id: value.id as string,
+        provider: (value.provider as AgentProviderId) ?? "unknown",
+        command: (value.command as string).trim(),
+        label: value.label as string,
+        summary: typeof value.summary === "string" ? value.summary : undefined,
+        createdAt: value.createdAt as number,
+        updatedAt: value.updatedAt as number,
+        lastResumedAt: typeof value.lastResumedAt === "number" ? value.lastResumedAt : undefined
+      }))
+      .sort((a, b) => b.updatedAt - a.updatedAt);
+  } catch {
+    return [];
+  }
+}
+
+async function saveProjectAgentSessions(
+  workspaceRoot: string,
+  sessions: ProjectAgentSession[]
+): Promise<void> {
+  const paths = getProjectAgentSessionPaths(workspaceRoot);
+  await fs.mkdir(paths.directory, { recursive: true });
+  await fs.writeFile(paths.sessions, `${JSON.stringify({ sessions }, null, 2)}\n`, "utf8");
+}
+
+function buildProjectAgentSessionLabel(workspaceRoot: string, provider: AgentProviderId, command: string, fallback?: string): string {
+  if (fallback?.trim()) return fallback.trim();
+  const workspaceName = path.basename(workspaceRoot) || "workspace";
+  const shortCommand = command.replace(/\s+/g, " ").trim().slice(0, 48);
+  return `${provider} · ${workspaceName}${shortCommand ? ` · ${shortCommand}` : ""}`;
+}
+
+function buildProjectAgentSessionId(workspaceRoot: string, command: string): string {
+  return `${Date.now()}-${hashString(`${workspaceRoot}::${command}`)}`;
+}
+
+async function storeProjectAgentSession(
+  workspaceRoot: string,
+  session: Omit<ProjectAgentSession, "id" | "createdAt" | "updatedAt" | "label"> & Partial<Pick<ProjectAgentSession, "label" | "summary" | "lastResumedAt">>,
+  command?: string
+): Promise<ProjectAgentSession> {
+  const normalizedCommand = (command ?? session.command).trim();
+  const now = Date.now();
+  const next: ProjectAgentSession = {
+    id: buildProjectAgentSessionId(workspaceRoot, normalizedCommand),
+    provider: session.provider,
+    command: normalizedCommand,
+    label: buildProjectAgentSessionLabel(workspaceRoot, session.provider, normalizedCommand, session.label),
+    summary: session.summary?.trim() || normalizedCommand,
+    createdAt: now,
+    updatedAt: now,
+    lastResumedAt: session.lastResumedAt
+  };
+  const sessions = await getProjectAgentSessions(workspaceRoot);
+  await saveProjectAgentSessions(workspaceRoot, [next, ...sessions]);
+  await appendProjectAgentResume(workspaceRoot, next);
+  return next;
+}
+
+async function appendProjectAgentResume(
+  workspaceRoot: string,
+  session: ProjectAgentSession
+): Promise<void> {
+  const { directory, resumes } = getProjectAgentSessionPaths(workspaceRoot);
+  await fs.mkdir(directory, { recursive: true });
+  const date = new Date(session.updatedAt).toLocaleString();
+  const content = [
+    `## ${session.label}`,
+    "",
+    `- Provider: ${session.provider}`,
+    `- Updated: ${date}`,
+    `- Resume: \`${session.command}\``,
+    "",
+    session.summary || "No summary saved.",
+    ""
+  ].join("\n");
+  await fs.appendFile(resumes, `${content}\n`, "utf8");
+}
+
+async function openProjectAgentResume(workspaceRoot: string): Promise<void> {
+  const { resumes } = getProjectAgentSessionPaths(workspaceRoot);
+  try {
+    await fs.access(resumes);
+  } catch {
+    vscode.window.showInformationMessage("Aucun résumé de session pour ce projet.");
+    return;
+  }
+  const document = await vscode.workspace.openTextDocument(vscode.Uri.file(resumes));
+  await vscode.window.showTextDocument(document, { preview: false });
+}
+
+async function openProjectAgentSessionsJson(workspaceRoot: string): Promise<void> {
+  const { sessions } = getProjectAgentSessionPaths(workspaceRoot);
+  try {
+    await fs.access(sessions);
+  } catch {
+    await saveProjectAgentSessions(workspaceRoot, []);
+  }
+  const document = await vscode.workspace.openTextDocument(vscode.Uri.file(sessions));
+  await vscode.window.showTextDocument(document, { preview: false });
+}
+
+async function deleteProjectAgentSession(workspaceRoot: string, sessionId: string): Promise<void> {
+  const sessions = await getProjectAgentSessions(workspaceRoot);
+  const next = sessions.filter((session) => session.id !== sessionId);
+  if (next.length === sessions.length) return;
+  await saveProjectAgentSessions(workspaceRoot, next);
+}
+
+async function runProjectAgentSession(
+  workspaceRoot: string,
+  session: ProjectAgentSession
+): Promise<void> {
+  const terminal = vscode.window.createTerminal({
+    name: `${session.provider}: ${session.label}`,
+    cwd: workspaceRoot
+  });
+  terminal.show(true);
+  terminal.sendText(session.command, true);
+
+  const sessions = await getProjectAgentSessions(workspaceRoot);
+  const index = sessions.findIndex((entry) => entry.id === session.id);
+  if (index !== -1) {
+    sessions[index].lastResumedAt = Date.now();
+    sessions[index].updatedAt = Date.now();
+    await saveProjectAgentSessions(workspaceRoot, sessions);
+  }
+}
 
 function getAgentHistoryEntries(context: vscode.ExtensionContext): AgentHistoryEntry[] {
   const raw = context.globalState.get<unknown>(AGENT_HISTORY_STORAGE_KEY);
@@ -418,6 +583,11 @@ type LaunchpadCombinedQuickPickItem =
   | LaunchpadQuickPickItem
   | LaunchpadActionQuickPickItem
   | LaunchpadSeparatorItem;
+
+type ProjectAgentSessionQuickPickItem = vscode.QuickPickItem & {
+  session?: ProjectAgentSession;
+  action?: "editJson" | "openSummary" | "delete";
+};
 
 function isProjectInLaunchpad(
   projects: LaunchpadProject[],
@@ -4923,6 +5093,50 @@ export function activate(context: vscode.ExtensionContext) {
   });
   const notesProvider = new ProjectNotesViewProvider();
   const agentHistoryProvider = new AgentHistoryProvider(context);
+  const agentSessionsItem = vscode.window.createStatusBarItem(
+    vscode.StatusBarAlignment.Left,
+    92
+  );
+  agentSessionsItem.text = "$(history) Sessions";
+  agentSessionsItem.tooltip = "Voir les sessions agents archivées pour ce projet";
+  agentSessionsItem.command = "pkvsconf.projectAgentSessions";
+  agentSessionsItem.show();
+  let resumePromptedWorkspace: string | undefined;
+
+  const refreshProjectAgentSessionsStatus = async (workspaceRoot?: string) => {
+    if (!workspaceRoot) {
+      agentSessionsItem.text = "$(history) Sessions";
+      agentSessionsItem.tooltip = "Ouvrez un projet pour accéder à ses sessions agents.";
+      return;
+    }
+    const sessions = await getProjectAgentSessions(workspaceRoot);
+    const latest = sessions[0];
+    agentSessionsItem.text = sessions.length
+      ? `$(history) Sessions ${sessions.length}`
+      : "$(history) Sessions";
+    agentSessionsItem.tooltip = latest
+      ? `Reprendre ${latest.label} (${formatRelativeTime(latest.updatedAt)})`
+      : "Aucune session agent archivée pour ce projet.";
+  };
+
+  const promptProjectAgentResume = async (workspaceRoot: string) => {
+    if (resumePromptedWorkspace === workspaceRoot) return;
+    resumePromptedWorkspace = workspaceRoot;
+    const latest = (await getProjectAgentSessions(workspaceRoot))[0];
+    if (!latest) return;
+    const action = await vscode.window.showInformationMessage(
+      `Reprendre « ${latest.label} » ? (${formatRelativeTime(latest.updatedAt)})`,
+      "Reprendre",
+      "Voir le résumé",
+      "Plus tard"
+    );
+    if (action === "Reprendre") {
+      await runProjectAgentSession(workspaceRoot, latest);
+      await refreshProjectAgentSessionsStatus(workspaceRoot);
+    } else if (action === "Voir le résumé") {
+      await openProjectAgentResume(workspaceRoot);
+    }
+  };
 
   const updateWorkspace = async () => {
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
@@ -4936,6 +5150,7 @@ export function activate(context: vscode.ExtensionContext) {
     }
 
     if (!workspaceRoot) {
+      await refreshProjectAgentSessionsStatus();
       return;
     }
 
@@ -4944,6 +5159,8 @@ export function activate(context: vscode.ExtensionContext) {
     await recordLaunchpadOpen(workspaceRoot);
 
     await ensureWorkspaceTitlebarColor(context);
+    await refreshProjectAgentSessionsStatus(workspaceRoot);
+    void promptProjectAgentResume(workspaceRoot);
 
     watcher = vscode.workspace.createFileSystemWatcher(
       new vscode.RelativePattern(workspaceRoot, "icon.*")
@@ -5656,6 +5873,18 @@ export function activate(context: vscode.ExtensionContext) {
         lastRunAt: Date.now()
       });
       agentHistoryProvider.refresh();
+
+      if (target.provider === "opencode" && cwd) {
+        const projectRoot = cwd;
+        await storeProjectAgentSession(projectRoot, {
+        provider: target.provider,
+        command: target.command,
+        label: target.label ?? undefined,
+        summary: target.label || target.command,
+        lastResumedAt: Date.now()
+      });
+        await refreshProjectAgentSessionsStatus(projectRoot);
+      }
     }
   );
 
@@ -5670,6 +5899,126 @@ export function activate(context: vscode.ExtensionContext) {
       if (choice !== "Vider") return;
       await context.globalState.update(AGENT_HISTORY_STORAGE_KEY, []);
       agentHistoryProvider.refresh();
+    }
+  );
+
+  const archiveProjectAgentSessionCmd = vscode.commands.registerCommand(
+    "pkvsconf.projectAgentSessionArchive",
+    async () => {
+      const workspaceRoot = getWorkspaceRootFsPath();
+      if (!workspaceRoot) {
+        vscode.window.showWarningMessage("Ouvrez un projet avant d'archiver une session agent.");
+        return;
+      }
+
+      const sessions = await getProjectAgentSessions(workspaceRoot);
+      const latest = sessions.find((entry) => entry.provider === "opencode");
+      const latestHistory = getAgentHistoryEntries(context).find(
+        (entry) => entry.provider === "opencode" && (entry.cwd ?? workspaceRoot) === workspaceRoot
+      );
+
+      const source = latest ?? latestHistory;
+
+      if (!source) {
+        vscode.window.showInformationMessage("Aucune session OpenCode à archiver automatiquement pour ce projet.");
+        return;
+      }
+
+      const session = await storeProjectAgentSession(workspaceRoot, {
+        provider: source.provider,
+        command: source.command,
+        label: source.label ?? undefined,
+        summary: source.label || source.command,
+        lastResumedAt: "lastRunAt" in source ? source.lastRunAt ?? Date.now() : Date.now()
+      });
+      await upsertAgentHistoryEntry(context, {
+        provider: session.provider,
+        command: session.command,
+        cwd: workspaceRoot,
+        label: session.label,
+        createdAt: session.createdAt
+      });
+      agentHistoryProvider.refresh();
+      await refreshProjectAgentSessionsStatus(workspaceRoot);
+      vscode.window.showInformationMessage(`Session « ${session.label} » archivée automatiquement.`);
+    }
+  );
+
+  const projectAgentSessionsCmd = vscode.commands.registerCommand(
+    "pkvsconf.projectAgentSessions",
+    async () => {
+      const workspaceRoot = getWorkspaceRootFsPath();
+      if (!workspaceRoot) {
+        vscode.window.showWarningMessage("Ouvrez un projet pour accéder à ses sessions agents.");
+        return;
+      }
+      const sessions = await getProjectAgentSessions(workspaceRoot);
+      const separator: vscode.QuickPickItem = sessions.length
+        ? { label: "Sessions archivées", kind: vscode.QuickPickItemKind.Separator }
+        : { label: "" };
+      const items: Array<ProjectAgentSessionQuickPickItem | vscode.QuickPickItem> = [
+        {
+          label: "$(edit) Éditer le JSON des sessions",
+          description: ".vscode/pkvsconf-agent-sessions.json",
+          action: "editJson"
+        },
+        {
+          label: "$(book) Ouvrir les résumés du projet",
+          description: ".vscode/pkvsconf-agent-resumes.md",
+          action: "openSummary"
+        },
+        ...(sessions.length ? [separator] : []),
+        ...sessions.map((session) => ({
+          label: `$(play) ${session.label}`,
+          description: `${session.provider} · ${formatRelativeTime(session.updatedAt)}`,
+          detail: session.summary || session.command,
+          session
+        }))
+      ];
+      const pick = await vscode.window.showQuickPick(
+        items as any,
+        { placeHolder: "Sessions agents de ce projet" }
+      ) as ProjectAgentSessionQuickPickItem | undefined;
+      if (!pick) return;
+      if (pick.action === "editJson") {
+        await openProjectAgentSessionsJson(workspaceRoot);
+        return;
+      }
+      if (pick.action === "openSummary") {
+        await openProjectAgentResume(workspaceRoot);
+        return;
+      }
+      if (pick.session) {
+        const action = await vscode.window.showQuickPick(
+          [
+            { label: "$(play) Reprendre", action: "resume" as const },
+            { label: "$(trash) Supprimer", action: "delete" as const },
+            { label: "$(book) Voir le résumé", action: "summary" as const },
+            { label: "$(edit) Ouvrir le JSON", action: "editJson" as const }
+          ],
+          { placeHolder: `Que faire avec « ${pick.session.label} » ?` }
+        );
+        if (!action) return;
+        if (action.action === "resume") {
+          await runProjectAgentSession(workspaceRoot, pick.session);
+          await refreshProjectAgentSessionsStatus(workspaceRoot);
+        } else if (action.action === "delete") {
+          const confirmed = await vscode.window.showWarningMessage(
+            `Supprimer la session « ${pick.session.label} » ?`,
+            { modal: true },
+            "Supprimer",
+            "Annuler"
+          );
+          if (confirmed === "Supprimer") {
+            await deleteProjectAgentSession(workspaceRoot, pick.session.id);
+            await refreshProjectAgentSessionsStatus(workspaceRoot);
+          }
+        } else if (action.action === "summary") {
+          await openProjectAgentResume(workspaceRoot);
+        } else {
+          await openProjectAgentSessionsJson(workspaceRoot);
+        }
+      }
     }
   );
 
@@ -6364,6 +6713,7 @@ export function activate(context: vscode.ExtensionContext) {
   statusBarTerm.command = "pkvsconf.terminalNewTab";
   statusBarTerm.show();
   context.subscriptions.push(statusBarTerm);
+  context.subscriptions.push(agentSessionsItem);
 
   void refreshRootSize();
 
@@ -6387,7 +6737,9 @@ export function activate(context: vscode.ExtensionContext) {
     addToGitignoreCmd,
     terminalSplitRightCmd,
     terminalNewTabCmd,
-    terminalSplitBottomCmd
+    terminalSplitBottomCmd,
+    archiveProjectAgentSessionCmd,
+    projectAgentSessionsCmd
   );
 }
 

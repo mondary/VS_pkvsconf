@@ -6,7 +6,7 @@ Toutes les modifications notables de **VS_pkvsconf** sont documentées ici.
 
 ## TODO — Roadmap
 
-Statut : `2.2026.16`
+Statut : `2.2026.18`
 
 ### Feature 1 — Add to .gitignore ✅
 - [x] Commande « ⛔ Ajouter au .gitignore » au clic droit explorer
@@ -31,6 +31,14 @@ Statut : `2.2026.16`
 - [x] Raccourci `Cmd/Ctrl+Alt+Shift+S`
 - [x] Option « ★ Favoris » dans le sélecteur de tri
 - [x] Handler `toggleFavorite` dans le panel webview
+
+### Sessions agents par projet ✅
+- [x] Registre local `.vscode/pkvsconf-agent-sessions.json`
+- [x] Résumés append-only dans `.vscode/pkvsconf-agent-resumes.md`
+- [x] Proposition de reprise de la dernière session à l'ouverture
+- [x] Bouton `$(history) Sessions` dans la status bar
+- [x] QuickPick pour reprendre, archiver ou consulter les résumés
+- [x] Édition directe du JSON et suppression d'une session depuis la liste
 
 ### Notes ✅
 - [x] Auto-save renforcé (blur + indicateur "✓ Sauvé")

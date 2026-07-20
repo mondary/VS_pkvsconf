@@ -2,7 +2,7 @@
   "name": "vs-pkvsconf",
   "displayName": "VS_pkvsconf",
   "description": "Adds a toolbar button in Explorer to reveal the active file in Finder.",
-  "version": "2.2026.16",
+  "version": "2.2026.18",
   "publisher": "Cmondary",
   "icon": "icon.png",
   "license": "MIT",
@@ -47,6 +47,8 @@
     "onCommand:pkvsconf.agentHistoryAddFromClipboard",
     "onCommand:pkvsconf.agentHistoryRun",
     "onCommand:pkvsconf.agentHistoryClear",
+    "onCommand:pkvsconf.projectAgentSessions",
+    "onCommand:pkvsconf.projectAgentSessionArchive",
     "onCommand:pkvsconf.kanbanOpen",
     "onCommand:pkvsconf.kanbanOpenEditor",
     "onCommand:pkvsconf.openInDefaultBrowser",
@@ -332,6 +334,16 @@
         "command": "pkvsconf.agentHistoryClear",
         "title": "Agent History: Vider l'historique",
         "icon": "$(trash)"
+      },
+      {
+        "command": "pkvsconf.projectAgentSessions",
+        "title": "Sessions agent: Ouvrir les sessions du projet",
+        "icon": "$(history)"
+      },
+      {
+        "command": "pkvsconf.projectAgentSessionArchive",
+        "title": "Sessions agent: Archiver la session courante",
+        "icon": "$(archive)"
       },
       {
         "command": "pkvsconf.openInDefaultBrowser",
