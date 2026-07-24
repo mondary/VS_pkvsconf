@@ -10,6 +10,7 @@
 
 - 🧭 Reveal in Finder (macOS)
 - 📦 Root folder size
+- 📏 Readable sizes in the native Explorer plus a detailed view
 - 🖼️ Project Icon
 - 🐙 Open GitHub Repository
 - 🏷️ Extension tags
@@ -32,6 +33,7 @@
 
 - Reveal in Finder: button at the top of Explorer (macOS).
 - Root folder size: status bar indicator, click to refresh.
+- File/folder sizes: the full size is displayed after each name in the native Explorer. The `Project sizes` view also provides a detailed tree with right-aligned sizes, expandable folders, and files that open on click. Long native Explorer labels rely on a local VS Code patch that may be overwritten by an application update.
 - Project Icon: place an `icon.*` at workspace root.
 - Open GitHub Repository: button in Source Control.
 - Extension tags: right-click an extension to tag it.
@@ -47,6 +49,10 @@
 
 ## ⚙️ Settings
 
+Explorer sizes:
+
+- `pkvsconf.explorer.showSizes`: show sizes in the native Explorer and detailed view (default `true`).
+
 Kanban settings:
 
 - `pkvsconf.kanban.agentCommand`: agent command, defaults to `opencode --prompt {prompt}`.
@@ -61,6 +67,7 @@ Status bar colors use:
 
 - Reveal Active File in Finder
 - Refresh Root Folder Size
+- Refresh sizes (explorer)
 - Open GitHub Repository
 - Category (Add Tag)
 - Search extensions
@@ -85,7 +92,7 @@ npx @vscode/vsce package --allow-missing-repository
 
 - Command Palette: "Extensions: Install from VSIX..."
 - Select the `.vsix` file in `release/`
-- Or via CLI: `code --install-extension release/vs-pkvsconf-2.2026.18.vsix --force`
+- Or via CLI: `code --install-extension release/vs-pkvsconf-2.2026.25.vsix --force`
 - Reload window
 
 ## 📋 Changelog

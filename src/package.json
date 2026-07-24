@@ -2,7 +2,7 @@
   "name": "vs-pkvsconf",
   "displayName": "VS_pkvsconf",
   "description": "Adds a toolbar button in Explorer to reveal the active file in Finder.",
-  "version": "2.2026.18",
+  "version": "2.2026.26",
   "publisher": "Cmondary",
   "icon": "icon.png",
   "license": "MIT",
@@ -58,6 +58,7 @@
     "onView:extensionTagsView",
     "onView:launchpadExplorerView",
     "onView:agentHistoryView",
+    "onView:workspaceSizesView",
     "onStartupFinished"
   ],
   "main": "./dist/extension.js",
@@ -81,6 +82,11 @@
     "configuration": {
       "title": "PK VS Conf",
       "properties": {
+        "pkvsconf.explorer.showSizes": {
+          "type": "boolean",
+          "default": true,
+          "description": "Afficher les tailles dans l'Explorer natif et dans la vue dédiée."
+        },
         "pkvsconf.launchpad.projects": {
           "type": "array",
           "default": [],
@@ -168,6 +174,12 @@
       }
     },
     "commands": [
+      {
+        "command": "pkvsconf.sizeExplorerRefresh",
+        "title": "Rafraîchir les tailles",
+        "category": "PK VS Conf",
+        "icon": "$(refresh)"
+      },
       {
         "command": "pkvsconf.kanbanOpen",
         "title": "Ouvrir le Kanban des agents",
@@ -379,6 +391,11 @@
     "views": {
       "explorer": [
         {
+          "id": "workspaceSizesView",
+          "name": "Tailles du projet",
+          "icon": "$(database)"
+        },
+        {
           "id": "agentHistoryView",
           "name": "Agent History",
           "icon": "$(history)"
@@ -449,6 +466,10 @@
       {
         "command": "pkvsconf.addToGitignore",
         "when": "false"
+      },
+      {
+        "command": "pkvsconf.sizeExplorerRefresh",
+        "when": "explorerViewletVisible"
       }
     ],
       "extension/context": [
@@ -516,6 +537,11 @@
         {
           "command": "pkvsconf.searchExtensions",
           "when": "view == extensionTagsView",
+          "group": "navigation"
+        },
+        {
+          "command": "pkvsconf.sizeExplorerRefresh",
+          "when": "view == workspaceSizesView",
           "group": "navigation"
         }
       ],

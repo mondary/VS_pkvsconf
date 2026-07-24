@@ -6,7 +6,7 @@ Toutes les modifications notables de **VS_pkvsconf** sont documentées ici.
 
 ## TODO — Roadmap
 
-Statut : `2.2026.18`
+Statut : `2.2026.25`
 
 ### Feature 1 — Add to .gitignore ✅
 - [x] Commande « ⛔ Ajouter au .gitignore » au clic droit explorer
@@ -17,6 +17,16 @@ Statut : `2.2026.18`
 - [x] Badge `⛔` sur fichiers/dossiers ignorés dans l'explorateur
 - [x] Auto-refresh quand `.gitignore` change
 - [x] Badge emoji (`⛔`) pour visibilité maximale
+
+### Feature 3 — Tailles fichiers/dossiers lisibles ✅
+- [x] Vue arborescente `Tailles du projet` intégrée au panneau Explorer
+- [x] Taille complète alignée à droite du nom via `TreeItem.description`
+- [x] Dossiers dépliables et fichiers ouvrables au clic
+- [x] Tooltip avec chemin et taille précise au survol
+- [x] Dossiers calculés en async avec cache
+- [x] Setting `pkvsconf.explorer.showSizes` (default `true`)
+- [x] Bouton `$(refresh) Rafraîchir les tailles` dans la toolbar de l'explorateur
+- [x] Suppression de l'ancienne vue dédiée `pkvsconfSizeExplorerView` + container activity bar `pkvsconfSizeContainer` (redondants avec l'explorateur natif)
 
 ### Explorer UX ✅
 - [x] Boutons Launchpad déplacés vers la vue Project Icon
@@ -60,6 +70,26 @@ Statut : `2.2026.18`
 ---
 
 ## Releases
+
+### [2.2026.25] - 2026-07-24
+#### Fixed
+- Dossiers sans taille : `provideFileDecoration` rendu synchrone avec placeholder `…` pendant le calcul async.
+- Les dossiers lourds comme `src` affichent maintenant leur taille après calcul.
+
+### [2.2026.24] - 2026-07-24
+#### Fixed
+- Calcul des dossiers en arrière-plan afin qu'un dossier lourd ne bloque plus les décorations des autres lignes.
+- Affichage exact en octets pour les fichiers inférieurs à 1 Ko.
+
+### [2.2026.23] - 2026-07-24
+#### Added
+- Affichage simultané des tailles complètes dans l'Explorer natif et dans la vue détaillée.
+- Patch local de la validation VS Code des badges longs, avec sauvegarde des fichiers originaux et checksum synchronisé.
+
+### [2.2026.22] - 2026-07-24
+#### Changed
+- Remplacement des badges natifs limités et illisibles par une vue dédiée `Tailles du projet`.
+- Affichage des tailles complètes à droite des noms, avec navigation dans les dossiers et ouverture des fichiers.
 
 ### [2.2026.14] - 2026-07-18
 #### Fixed

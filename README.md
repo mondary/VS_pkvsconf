@@ -10,6 +10,7 @@
 
 - 🧭 Reveal in Finder (macOS)
 - 📦 Taille du dossier racine
+- 📏 Tailles lisibles dans l'Explorer natif + vue détaillée
 - 🖼️ Project Icon
 - 🐙 Open GitHub Repository
 - 🏷️ Tags d'extensions
@@ -34,6 +35,7 @@
 
 - Reveal in Finder : bouton en haut du panneau Explorer (macOS).
 - Taille du dossier racine : indicateur en status bar, clic pour rafraîchir.
+- Tailles fichiers/dossiers : la taille complète est affichée après le nom dans l'Explorer natif. La vue `Tailles du projet` fournit aussi une arborescence détaillée avec la taille alignée à droite, des dossiers dépliables et des fichiers ouvrables au clic. Le support des libellés longs dans l'Explorer natif repose sur un patch local de VS Code qui peut être remplacé par une mise à jour de l'application.
 - Project Icon : place un `icon.*` à la racine pour afficher l'icône.
 - Open GitHub Repository : bouton dans Source Control.
 - Tags d'extensions : clic droit sur une extension pour taguer.
@@ -51,6 +53,10 @@
 
 ## ⚙️ Réglages
 
+Tailles dans l'explorateur :
+
+- `pkvsconf.explorer.showSizes` : afficher les tailles dans l'Explorer natif et la vue détaillée (default `true`).
+
 Le Kanban utilise :
 
 - `pkvsconf.kanban.agentCommand` : commande d'agent, par défaut `opencode --prompt {prompt}`.
@@ -65,6 +71,7 @@ Les couleurs de la status bar utilisent :
 
 - Reveal Active File in Finder
 - Refresh Root Folder Size
+- Rafraîchir les tailles (explorer)
 - Open GitHub Repository
 - Catégorie (Add Tag)
 - Rechercher des extensions
@@ -91,7 +98,7 @@ npx @vscode/vsce package --allow-missing-repository
 
 - Palette de commandes : "Extensions: Install from VSIX..."
 - Sélectionner le fichier `.vsix` dans `release/`
-- Ou en CLI : `code --install-extension release/vs-pkvsconf-2.2026.17.vsix --force`
+- Ou en CLI : `code --install-extension release/vs-pkvsconf-2.2026.25.vsix --force`
 - Recharger la fenêtre
 
 ## 📋 Changelog

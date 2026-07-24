@@ -4,6 +4,7 @@ exports.activate = activate;
 exports.deactivate = deactivate;
 const vscode = require("vscode");
 const fs = require("fs/promises");
+const fs_1 = require("fs");
 const path = require("path");
 const cp = require("child_process");
 const net = require("net");
@@ -4424,8 +4425,218 @@ class GitignoreDecorationProvider {
         return undefined;
     }
 }
+// Vue dédiée dans l'Explorer : TreeItem.description permet d'afficher une taille
+// lisible à droite du nom, contrairement aux badges natifs limités à 2 caractères.
+let sizeDecorChannel;
+function sizeDecorLog(msg) {
+    if (!sizeDecorChannel) {
+        sizeDecorChannel = vscode.window.createOutputChannel("PK Sizes");
+    }
+    sizeDecorChannel.appendLine(msg);
+}
+class SizeExplorerProvider {
+    constructor() {
+        this._onDidChangeTreeData = new vscode.EventEmitter();
+        this.onDidChangeTreeData = this._onDidChangeTreeData.event;
+        this.dirSizeCache = new Map();
+        this.dirSizePromises = new Map();
+        this.enabled = true;
+    }
+    setEnabled(value) {
+        if (this.enabled === value)
+            return;
+        this.enabled = value;
+        this.refresh();
+    }
+    isEnabled() {
+        return this.enabled;
+    }
+    refresh() {
+        this.dirSizeCache.clear();
+        this.dirSizePromises.clear();
+        this._onDidChangeTreeData.fire(undefined);
+    }
+    refreshPath(_fsPath) {
+        this.refresh();
+    }
+    async getChildren(element) {
+        if (!this.enabled)
+            return [];
+        if (!element) {
+            const folders = vscode.workspace.workspaceFolders ?? [];
+            if (folders.length > 1) {
+                return folders.map((folder) => ({
+                    uri: folder.uri,
+                    isDirectory: true,
+                    isWorkspaceRoot: true
+                }));
+            }
+            if (folders.length === 0)
+                return [];
+            return this.readDirectory(folders[0].uri);
+        }
+        return element.isDirectory ? this.readDirectory(element.uri) : [];
+    }
+    async getTreeItem(element) {
+        const state = element.isDirectory
+            ? vscode.TreeItemCollapsibleState.Collapsed
+            : vscode.TreeItemCollapsibleState.None;
+        const item = new vscode.TreeItem(path.basename(element.uri.fsPath), state);
+        item.resourceUri = element.uri;
+        item.contextValue = element.isDirectory ? "sizeFolder" : "sizeFile";
+        let bytes = 0;
+        try {
+            bytes = await this.getSize(element.uri);
+            if (!element.isDirectory) {
+                item.command = {
+                    command: "vscode.open",
+                    title: "Ouvrir le fichier",
+                    arguments: [element.uri]
+                };
+            }
+            item.description = formatBytes(bytes);
+            item.tooltip = `${element.uri.fsPath}\n${formatBytes(bytes)}`;
+        }
+        catch {
+            item.description = "indisponible";
+            item.tooltip = element.uri.fsPath;
+        }
+        return item;
+    }
+    async readDirectory(uri) {
+        let entries;
+        try {
+            entries = await fs.readdir(uri.fsPath, { withFileTypes: true });
+        }
+        catch {
+            return [];
+        }
+        return entries
+            .filter((entry) => !entry.isSymbolicLink())
+            .sort((a, b) => {
+            if (a.isDirectory() !== b.isDirectory())
+                return a.isDirectory() ? -1 : 1;
+            return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+        })
+            .map((entry) => ({
+            uri: vscode.Uri.file(path.join(uri.fsPath, entry.name)),
+            isDirectory: entry.isDirectory()
+        }));
+    }
+    async getSize(uri) {
+        const stat = await fs.stat(uri.fsPath);
+        if (!stat.isDirectory())
+            return stat.size;
+        const dirPath = uri.fsPath;
+        const cached = this.dirSizeCache.get(dirPath);
+        if (cached !== undefined)
+            return cached;
+        const pending = this.dirSizePromises.get(dirPath);
+        if (pending)
+            return pending;
+        const calculation = getDirectorySizeBytes(dirPath)
+            .then(({ total }) => {
+            this.dirSizeCache.set(dirPath, total);
+            return total;
+        })
+            .finally(() => this.dirSizePromises.delete(dirPath));
+        this.dirSizePromises.set(dirPath, calculation);
+        return calculation;
+    }
+    getCachedDirectorySize(fsPath) {
+        return this.dirSizeCache.get(fsPath);
+    }
+}
+class NativeSizeDecorationProvider {
+    constructor() {
+        this._onDidChangeFileDecorations = new vscode.EventEmitter();
+        this.onDidChangeFileDecorations = this._onDidChangeFileDecorations.event;
+        this.dirSizeCache = new Map();
+        this.enabled = true;
+    }
+    setEnabled(value) {
+        if (this.enabled === value)
+            return;
+        this.enabled = value;
+        this._onDidChangeFileDecorations.fire(undefined);
+    }
+    isEnabled() {
+        return this.enabled;
+    }
+    refresh() {
+        this.dirSizeCache.clear();
+        this._onDidChangeFileDecorations.fire(undefined);
+    }
+    provideFileDecoration(uri) {
+        if (!this.enabled || uri.scheme !== "file")
+            return undefined;
+        if (!vscode.workspace.getWorkspaceFolder(uri))
+            return undefined;
+        let stat;
+        try {
+            stat = (0, fs_1.statSync)(uri.fsPath);
+        }
+        catch {
+            return undefined;
+        }
+        if (!stat.isDirectory()) {
+            return makeSizeBadge(stat.size);
+        }
+        const fsPath = uri.fsPath;
+        const cached = this.dirSizeCache.get(fsPath);
+        if (cached !== undefined)
+            return makeSizeBadge(cached);
+        const bytes = getDirSizeSync(fsPath);
+        this.dirSizeCache.set(fsPath, bytes);
+        return makeSizeBadge(bytes);
+    }
+}
+function getDirSizeSync(dirPath) {
+    try {
+        const out = cp.execSync(`du -sk "${dirPath}" 2>/dev/null`, {
+            encoding: "utf8",
+            timeout: 5000,
+            stdio: ["pipe", "pipe", "ignore"]
+        });
+        const kb = parseInt(out.trim().split(/\s+/)[0], 10);
+        return isNaN(kb) ? 0 : kb * 1024;
+    }
+    catch {
+        return 0;
+    }
+}
+function makeSizeBadge(bytes) {
+    return {
+        badge: formatBytesBadge(bytes),
+        tooltip: `Taille : ${formatBytes(bytes)}`
+    };
+}
+function formatBytesBadge(bytes) {
+    if (bytes < 10)
+        return `${bytes}`;
+    if (bytes < 1024)
+        return "B";
+    const units = ["K", "M", "G", "T", "P"];
+    let size = bytes;
+    let i = -1;
+    do {
+        size /= 1024;
+        i++;
+    } while (size >= 1024 && i < units.length - 1);
+    const rounded = Math.round(size);
+    if (rounded >= 1 && rounded <= 9)
+        return `${rounded}${units[i]}`;
+    return units[i];
+}
 function activate(context) {
-    (0, kanban_1.registerKanban)(context);
+    sizeDecorLog("[activate] START");
+    try {
+        (0, kanban_1.registerKanban)(context);
+        sizeDecorLog("[activate] after registerKanban");
+    }
+    catch (e) {
+        sizeDecorLog(`[activate] registerKanban THREW: ${e.message}\n${e.stack}`);
+    }
     // Gitignore decoration provider
     const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     let gitignoreProvider;
@@ -4504,6 +4715,7 @@ function activate(context) {
         const workspaceRoot = workspaceFolder?.uri.fsPath;
         provider.setWorkspace(workspaceRoot);
         provider.refresh();
+        sizeExplorerProvider?.refresh();
         if (watcher) {
             watcher.dispose();
             watcher = undefined;
@@ -4529,6 +4741,53 @@ function activate(context) {
     context.subscriptions.push(vscode.window.registerWebviewViewProvider(LAUNCHPAD_EXPLORER_VIEW_ID, launchpadProvider));
     context.subscriptions.push(vscode.window.registerWebviewViewProvider(PROJECT_NOTES_VIEW_ID, notesProvider));
     context.subscriptions.push(vscode.window.registerTreeDataProvider("agentHistoryView", agentHistoryProvider));
+    // Dedicated size tree: descriptions are readable and aligned after names.
+    let sizeExplorerProvider;
+    let nativeSizeDecorationProvider;
+    try {
+        sizeExplorerProvider = new SizeExplorerProvider();
+        nativeSizeDecorationProvider = new NativeSizeDecorationProvider();
+        context.subscriptions.push(vscode.window.createTreeView("workspaceSizesView", {
+            treeDataProvider: sizeExplorerProvider,
+            showCollapseAll: true
+        }));
+        context.subscriptions.push(vscode.window.registerFileDecorationProvider(nativeSizeDecorationProvider));
+        sizeDecorLog(`[init] SizeExplorerProvider registered. workspaceRoot=${vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? "<none>"}`);
+        sizeExplorerProvider.refresh();
+        const readShowSizesConfig = () => {
+            const cfg = vscode.workspace.getConfiguration("pkvsconf.explorer");
+            const enabled = cfg.get("showSizes", true);
+            sizeExplorerProvider?.setEnabled(enabled);
+            nativeSizeDecorationProvider?.setEnabled(enabled);
+        };
+        readShowSizesConfig();
+        context.subscriptions.push(vscode.workspace.onDidChangeConfiguration((e) => {
+            if (e.affectsConfiguration("pkvsconf.explorer.showSizes")) {
+                readShowSizesConfig();
+            }
+        }));
+        context.subscriptions.push(vscode.commands.registerCommand("pkvsconf.sizeExplorerRefresh", () => {
+            sizeExplorerProvider?.refresh();
+            nativeSizeDecorationProvider?.refresh();
+        }));
+        const sizeWatcher = vscode.workspace.createFileSystemWatcher("**/*");
+        let sizeDebounce;
+        const refreshSizesFor = (uri) => {
+            clearTimeout(sizeDebounce);
+            sizeDebounce = setTimeout(() => {
+                sizeExplorerProvider?.refreshPath(uri.fsPath);
+                nativeSizeDecorationProvider?.refresh();
+            }, 300);
+        };
+        sizeWatcher.onDidCreate(refreshSizesFor);
+        sizeWatcher.onDidDelete(refreshSizesFor);
+        sizeWatcher.onDidChange(refreshSizesFor);
+        context.subscriptions.push(sizeWatcher);
+        context.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(() => sizeExplorerProvider?.refresh()));
+    }
+    catch (e) {
+        sizeDecorLog(`[size init] THREW: ${e.message}\n${e.stack}`);
+    }
     // Auto-import Codex sessions from ~/.codex/history.jsonl so sessions created
     // in any terminal show up in Agent History.
     const codexImportInterval = setInterval(() => {
