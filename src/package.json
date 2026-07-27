@@ -127,7 +127,26 @@
           "default": "sleek",
           "enum": [
             "sleek",
-            "classic"
+            "classic",
+            "catppuccin-mocha",
+            "catppuccin-macchiato",
+            "catppuccin-frappe",
+            "catppuccin-latte",
+            "dracula",
+            "tokyo-night",
+            "tokyo-night-storm",
+            "nord",
+            "rose-pine",
+            "rose-pine-moon",
+            "rose-pine-dawn",
+            "github-dark",
+            "github-dark-dimmed",
+            "github-light",
+            "one-dark-pro",
+            "gruvbox-dark",
+            "gruvbox-material",
+            "solarized-dark",
+            "solarized-light"
           ],
           "description": "Thème de la vue Launchpad plein écran."
         },
@@ -392,7 +411,8 @@
       "explorer": [
         {
           "id": "workspaceSizesView",
-          "name": "Tailles du projet",
+          "name": "Project Size",
+          "type": "webview",
           "icon": "$(database)"
         },
         {
@@ -641,6 +661,7 @@
   },
   "scripts": {
     "ensure:version-bump": "node ./scripts/ensure-version-bump.mjs",
+    "setup": "npm install --no-save @types/node@^20 @types/vscode@^1.85",
     "build": "tsc -p .",
     "watch": "tsc -w -p .",
     "package": "mkdir -p ../release && vsce package -o ../release/${npm_package_name}-${npm_package_version}.vsix",
@@ -648,8 +669,6 @@
   },
   "devDependencies": {
     "@types/node": "^20.14.10",
-    "@types/vscode": "^1.85.0",
-    "@vscode/vsce": "^3.9.1",
-    "typescript": "^5.5.4"
+    "@types/vscode": "^1.85.0"
   }
 }

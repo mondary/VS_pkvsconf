@@ -1,15 +1,50 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.activate = activate;
 exports.deactivate = deactivate;
-const vscode = require("vscode");
-const fs = require("fs/promises");
+const vscode = __importStar(require("vscode"));
+const fs = __importStar(require("fs/promises"));
 const fs_1 = require("fs");
-const path = require("path");
-const cp = require("child_process");
-const net = require("net");
-const os = require("os");
+const path = __importStar(require("path"));
+const cp = __importStar(require("child_process"));
+const util = __importStar(require("util"));
+const net = __importStar(require("net"));
+const os = __importStar(require("os"));
 const kanban_1 = require("./kanban");
+const execAsync = util.promisify(cp.exec);
 const SIZE_UNITS = ["KB", "MB", "GB", "TB"];
 const ICON_PREFIX = "icon.";
 const VIEW_ID = "projectIconView";
@@ -533,17 +568,66 @@ async function setLaunchpadLayoutSettings(settings) {
     if (typeof settings.focusColor === "string") {
         await cfg.update("launchpad.focusColor", normalizeCssHexColor(settings.focusColor, LAUNCHPAD_LAYOUT_DEFAULTS.focusColor), vscode.ConfigurationTarget.Global);
     }
-    if (settings.theme === "classic" || settings.theme === "sleek") {
+    if (isLaunchpadTheme(settings.theme)) {
         await cfg.update("launchpad.theme", settings.theme, vscode.ConfigurationTarget.Global);
     }
     if (settings.restorePanels === "none" || settings.restorePanels === "left" || settings.restorePanels === "right" || settings.restorePanels === "both") {
         await cfg.update("launchpad.restorePanels", settings.restorePanels, vscode.ConfigurationTarget.Global);
     }
 }
+const LAUNCHPAD_THEMES = [
+    "sleek",
+    "classic",
+    "catppuccin-mocha",
+    "catppuccin-macchiato",
+    "catppuccin-frappe",
+    "catppuccin-latte",
+    "dracula",
+    "tokyo-night",
+    "tokyo-night-storm",
+    "nord",
+    "rose-pine",
+    "rose-pine-moon",
+    "rose-pine-dawn",
+    "github-dark",
+    "github-dark-dimmed",
+    "github-light",
+    "one-dark-pro",
+    "gruvbox-dark",
+    "gruvbox-material",
+    "solarized-dark",
+    "solarized-light"
+];
+function isLaunchpadTheme(value) {
+    return typeof value === "string" && LAUNCHPAD_THEMES.includes(value);
+}
 function getLaunchpadTheme() {
     const value = vscode.workspace.getConfiguration("pkvsconf").get("launchpad.theme");
-    return value === "classic" ? "classic" : "sleek";
+    return isLaunchpadTheme(value) ? value : "sleek";
 }
+const LAUNCHPAD_THEME_LABELS = {
+    "sleek": "Sleek (défaut)",
+    "classic": "Classique",
+    "catppuccin-mocha": "Catppuccin Mocha",
+    "catppuccin-macchiato": "Catppuccin Macchiato",
+    "catppuccin-frappe": "Catppuccin Frappé",
+    "catppuccin-latte": "Catppuccin Latte ☀",
+    "dracula": "Dracula",
+    "tokyo-night": "Tokyo Night",
+    "tokyo-night-storm": "Tokyo Night Storm",
+    "nord": "Nord",
+    "rose-pine": "Rosé Pine",
+    "rose-pine-moon": "Rosé Pine Moon",
+    "rose-pine-dawn": "Rosé Pine Dawn ☀",
+    "github-dark": "GitHub Dark",
+    "github-dark-dimmed": "GitHub Dark Dimmed",
+    "github-light": "GitHub Light ☀",
+    "one-dark-pro": "One Dark Pro",
+    "gruvbox-dark": "Gruvbox Dark",
+    "gruvbox-material": "Gruvbox Material",
+    "solarized-dark": "Solarized Dark",
+    "solarized-light": "Solarized Light ☀"
+};
 function clampNumber(value, min, max) {
     if (!Number.isFinite(value)) {
         return min;
@@ -4496,7 +4580,12 @@ class SizeExplorerProvider {
                 };
             }
             item.description = formatBytes(bytes);
-            item.tooltip = `${element.uri.fsPath}\n${formatBytes(bytes)}`;
+            if (!element.isDirectory) {
+                item.tooltip = await createPreviewTooltip(element.uri, bytes);
+            }
+            else {
+                item.tooltip = `${element.uri.fsPath}\n${formatBytes(bytes)}`;
+            }
         }
         catch {
             item.description = "indisponible";
@@ -4629,6 +4718,1623 @@ function formatBytesBadge(bytes) {
         return `${rounded}${units[i]}`;
     return units[i];
 }
+const MATERIAL_ICON_EXTENSION_ID = "PKief.material-icon-theme";
+class WorkspaceSizesWebviewProvider {
+    constructor() {
+        this._filter = "";
+        this._dirCache = new Map();
+        this._materialMapping = null;
+        this._iconCache = new Map();
+        this._materialLoaded = false;
+        this._phpServers = new Map();
+    }
+    async loadMaterialIcons() {
+        if (this._materialLoaded)
+            return;
+        this._materialLoaded = true;
+        try {
+            const ext = vscode.extensions.getExtension(MATERIAL_ICON_EXTENSION_ID) ?? vscode.extensions.all.find(e => e.id === MATERIAL_ICON_EXTENSION_ID);
+            if (!ext)
+                return;
+            this._materialExtPath = ext.extensionPath;
+            const mappingPath = path.join(ext.extensionPath, "dist", "material-icons.json");
+            const altPath = path.join(ext.extensionPath, "material-icons.json");
+            let raw;
+            try {
+                raw = await fs.readFile(mappingPath, "utf-8");
+            }
+            catch {
+                raw = await fs.readFile(altPath, "utf-8");
+            }
+            const parsed = JSON.parse(raw);
+            this._materialMapping = {
+                fileExtensions: parsed.fileExtensions ?? {},
+                fileNames: parsed.fileNames ?? {},
+                folderNames: parsed.folderNames ?? {}
+            };
+        }
+        catch (error) {
+            console.warn("Material Icon Theme introuvable:", error);
+        }
+    }
+    resolveMaterialIconName(name, isDir) {
+        if (!this._materialMapping)
+            return undefined;
+        const lower = name.toLowerCase();
+        if (isDir) {
+            return this._materialMapping.folderNames?.[lower] ?? "folder";
+        }
+        if (this._materialMapping.fileNames?.[lower]) {
+            return this._materialMapping.fileNames[lower];
+        }
+        const ext = path.extname(name).slice(1).toLowerCase();
+        if (ext && this._materialMapping.fileExtensions?.[ext]) {
+            return this._materialMapping.fileExtensions[ext];
+        }
+        return "file";
+    }
+    async getMaterialIconUrl(name, isDir) {
+        if (!this._materialExtPath || !this._materialMapping)
+            return undefined;
+        const iconName = this.resolveMaterialIconName(name, isDir);
+        if (!iconName)
+            return undefined;
+        const cached = this._iconCache.get(iconName);
+        if (cached)
+            return cached;
+        const svgPath = path.join(this._materialExtPath, "icons", `${iconName}.svg`);
+        try {
+            const svg = await fs.readFile(svgPath, "utf-8");
+            const dataUri = `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+            this._iconCache.set(iconName, dataUri);
+            return dataUri;
+        }
+        catch {
+            return undefined;
+        }
+    }
+    resolveWebviewView(webviewView) {
+        this._view = webviewView;
+        webviewView.webview.options = {
+            enableScripts: true,
+            localResourceRoots: []
+        };
+        webviewView.onDidChangeVisibility(() => {
+            if (this._view?.visible) {
+                this.refresh();
+            }
+        });
+        webviewView.webview.onDidReceiveMessage(async (message) => {
+            try {
+                switch (message.command) {
+                    case "expand": {
+                        const children = await this.scanDirectory(message.path);
+                        this._view?.webview.postMessage({
+                            command: "children",
+                            parentPath: message.path,
+                            children
+                        });
+                        break;
+                    }
+                    case "filter":
+                        this._filter = message.value || "";
+                        if (this._filterTimer)
+                            clearTimeout(this._filterTimer);
+                        this._filterTimer = setTimeout(() => this.refresh(), 150);
+                        break;
+                    case "open":
+                        await vscode.commands.executeCommand("vscode.open", vscode.Uri.file(message.path));
+                        break;
+                    case "reveal":
+                        await vscode.commands.executeCommand("revealFileInOS", vscode.Uri.file(message.path));
+                        break;
+                    case "refresh":
+                        this._dirCache.clear();
+                        this.refresh();
+                        break;
+                    case "preview":
+                        await this.openSmartPreview(message.path);
+                        break;
+                    case "topFiles": {
+                        const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+                        if (ws) {
+                            const top = await this.getTopFiles(ws, 50);
+                            this._view?.webview.postMessage({ command: "topFilesResult", items: top });
+                        }
+                        break;
+                    }
+                    case "treemap": {
+                        const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+                        if (ws) {
+                            const tree = await this.buildTreeHierarchy(ws);
+                            this._view?.webview.postMessage({ command: "treemapResult", tree });
+                        }
+                        break;
+                    }
+                    case "exportCsv": {
+                        const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+                        if (ws) {
+                            await this.exportCsv(ws);
+                        }
+                        break;
+                    }
+                    case "cleanup": {
+                        const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+                        if (ws) {
+                            const items = await this.detectCleanupTargets(ws);
+                            this._view?.webview.postMessage({ command: "cleanupResult", items });
+                        }
+                        break;
+                    }
+                    case "cleanupDelete": {
+                        if (message.paths && Array.isArray(message.paths)) {
+                            await this.deleteCleanupTargets(message.paths);
+                        }
+                        break;
+                    }
+                }
+            }
+            catch (error) {
+                console.error("WorkspaceSizes message error:", error);
+            }
+        });
+        this.refresh();
+    }
+    async refresh() {
+        if (!this._view)
+            return;
+        const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        if (!workspaceRoot) {
+            this._view.title = "Project Size";
+            this._view.webview.html = this.getPlaceholderHtml("Aucun workspace ouvert");
+            return;
+        }
+        const rootName = path.basename(workspaceRoot);
+        this._view.title = "Project Size · calcul...";
+        this._view.webview.html = this.getHtml(this._view.webview.cspSource, workspaceRoot, rootName, this._filter, 0);
+        void (async () => {
+            try {
+                const { total } = await getDirectorySizeBytes(workspaceRoot);
+                const totalText = formatBytes(total);
+                this._view.title = `Project Size · ${totalText}`;
+            }
+            catch (error) {
+                console.error("WorkspaceSizes total error:", error);
+                this._view.title = "Project Size";
+            }
+        })();
+    }
+    async scanDirectory(dirPath) {
+        await this.loadMaterialIcons();
+        const cached = this._dirCache.get(dirPath);
+        if (cached)
+            return cached;
+        const entries = [];
+        let dirents;
+        try {
+            dirents = await fs.readdir(dirPath, { withFileTypes: true });
+        }
+        catch (error) {
+            console.error("Scan readdir error:", error);
+            return entries;
+        }
+        const pending = [];
+        for (const dirent of dirents) {
+            if (dirent.isSymbolicLink())
+                continue;
+            const fullPath = path.join(dirPath, dirent.name);
+            const isDir = dirent.isDirectory();
+            const entry = {
+                name: dirent.name,
+                path: fullPath,
+                size: 0,
+                sizeText: "...",
+                type: isDir ? "Dossier" : path.extname(dirent.name).slice(1).toLowerCase(),
+                isDirectory: isDir,
+                mtime: 0
+            };
+            entries.push(entry);
+            pending.push((async () => {
+                try {
+                    const stat = await fs.stat(fullPath);
+                    entry.mtime = stat.mtimeMs;
+                    if (isDir) {
+                        try {
+                            const { total } = await getDirectorySizeBytes(fullPath);
+                            entry.size = total;
+                        }
+                        catch {
+                            entry.size = 0;
+                        }
+                    }
+                    else {
+                        entry.size = stat.size;
+                    }
+                    entry.sizeText = formatBytes(entry.size);
+                }
+                catch {
+                    // ignore
+                }
+                try {
+                    entry.iconUrl = await this.getMaterialIconUrl(dirent.name, isDir);
+                }
+                catch {
+                    // ignore
+                }
+            })());
+        }
+        await Promise.all(pending);
+        entries.sort((a, b) => {
+            if (a.isDirectory !== b.isDirectory)
+                return a.isDirectory ? -1 : 1;
+            return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+        });
+        this._dirCache.set(dirPath, entries);
+        return entries;
+    }
+    async scanAllFiles(dirPath, maxFiles = 20000, depth = 0) {
+        const results = [];
+        if (depth > 12 || results.length > maxFiles)
+            return results;
+        await this.loadMaterialIcons();
+        const stack = [{ dir: dirPath, depth: 0 }];
+        const visited = new Set();
+        while (stack.length && results.length < maxFiles) {
+            const { dir, depth: d } = stack.shift();
+            if (visited.has(dir))
+                continue;
+            visited.add(dir);
+            let dirents;
+            try {
+                dirents = await fs.readdir(dir, { withFileTypes: true });
+            }
+            catch {
+                continue;
+            }
+            for (const dirent of dirents) {
+                if (results.length >= maxFiles)
+                    break;
+                if (dirent.isSymbolicLink())
+                    continue;
+                const fullPath = path.join(dir, dirent.name);
+                if (dirent.isDirectory()) {
+                    if (WorkspaceSizesWebviewProvider.TOP_FILES_SKIP_DIRS.has(dirent.name))
+                        continue;
+                    stack.push({ dir: fullPath, depth: d + 1 });
+                    continue;
+                }
+                let stat;
+                try {
+                    stat = await fs.stat(fullPath);
+                }
+                catch {
+                    continue;
+                }
+                const iconUrl = await this.getMaterialIconUrl(dirent.name, false);
+                results.push({
+                    name: dirent.name,
+                    path: fullPath,
+                    size: stat.size,
+                    sizeText: formatBytes(stat.size),
+                    type: path.extname(dirent.name).slice(1).toLowerCase(),
+                    isDirectory: false,
+                    mtime: stat.mtimeMs,
+                    iconUrl
+                });
+            }
+        }
+        return results;
+    }
+    async getTopFiles(rootPath, limit = 50) {
+        const all = await this.scanAllFiles(rootPath);
+        return all.sort((a, b) => b.size - a.size).slice(0, limit);
+    }
+    async buildTreeHierarchy(rootPath, maxDepth = 3) {
+        const buildNode = async (dirPath, name, depth) => {
+            const node = {
+                name,
+                path: dirPath,
+                size: 0,
+                isDir: true,
+                children: []
+            };
+            let dirents;
+            try {
+                dirents = await fs.readdir(dirPath, { withFileTypes: true });
+            }
+            catch {
+                return node;
+            }
+            const children = [];
+            for (const dirent of dirents) {
+                if (dirent.isSymbolicLink())
+                    continue;
+                const fullPath = path.join(dirPath, dirent.name);
+                if (dirent.isDirectory()) {
+                    if (depth >= maxDepth) {
+                        try {
+                            const { total } = await getDirectorySizeBytes(fullPath);
+                            node.size += total;
+                        }
+                        catch { /* skip */ }
+                        continue;
+                    }
+                    const childNode = await buildNode(fullPath, dirent.name, depth + 1);
+                    if (childNode.size > 0 || childNode.children?.length) {
+                        children.push(childNode);
+                        node.size += childNode.size;
+                    }
+                }
+                else {
+                    try {
+                        const stat = await fs.stat(fullPath);
+                        node.size += stat.size;
+                        if (depth < maxDepth && stat.size > 0) {
+                            children.push({
+                                name: dirent.name,
+                                path: fullPath,
+                                size: stat.size,
+                                isDir: false
+                            });
+                        }
+                    }
+                    catch { /* skip */ }
+                }
+            }
+            children.sort((a, b) => b.size - a.size);
+            const top = children.filter(c => c.size >= node.size * 0.005).slice(0, 30);
+            if (children.length > top.length) {
+                const othersSize = children.slice(top.length).reduce((s, c) => s + c.size, 0);
+                if (othersSize > 0) {
+                    top.push({ name: `+ ${children.length - top.length} autres`, path: dirPath, size: othersSize, isDir: false });
+                }
+            }
+            node.children = top;
+            return node;
+        };
+        return buildNode(rootPath, path.basename(rootPath) || rootPath, 0);
+    }
+    async detectCleanupTargets(rootPath) {
+        const results = [];
+        await this.loadMaterialIcons();
+        const queue = [rootPath];
+        const visited = new Set();
+        let count = 0;
+        while (queue.length && count < 500) {
+            const dir = queue.shift();
+            if (visited.has(dir))
+                continue;
+            visited.add(dir);
+            let dirents;
+            try {
+                dirents = await fs.readdir(dir, { withFileTypes: true });
+            }
+            catch {
+                continue;
+            }
+            for (const dirent of dirents) {
+                if (!dirent.isDirectory() || dirent.isSymbolicLink())
+                    continue;
+                if (WorkspaceSizesWebviewProvider.CLEANUP_PATTERNS.includes(dirent.name)) {
+                    const fullPath = path.join(dir, dirent.name);
+                    let size = 0;
+                    try {
+                        const { total } = await getDirectorySizeBytes(fullPath);
+                        size = total;
+                    }
+                    catch {
+                        size = 0;
+                    }
+                    const stat = await fs.stat(fullPath).catch(() => null);
+                    const iconUrl = await this.getMaterialIconUrl(dirent.name, true);
+                    results.push({
+                        name: dirent.name,
+                        path: fullPath,
+                        size,
+                        sizeText: formatBytes(size),
+                        type: "Cleanup",
+                        isDirectory: true,
+                        mtime: stat?.mtimeMs ?? 0,
+                        iconUrl,
+                        suggestion: `Dossier ${dirent.name} régénérable`
+                    });
+                    count++;
+                }
+                else {
+                    queue.push(path.join(dir, dirent.name));
+                }
+                if (count >= 500)
+                    break;
+            }
+        }
+        return results.sort((a, b) => b.size - a.size);
+    }
+    async deleteCleanupTargets(paths) {
+        let deleted = 0;
+        let freed = 0;
+        for (const p of paths) {
+            try {
+                const stat = await fs.stat(p);
+                freed += stat.isDirectory() ? (await getDirectorySizeBytes(p).then(r => r.total).catch(() => 0)) : stat.size;
+                await fs.rm(p, { recursive: true, force: true });
+                deleted++;
+            }
+            catch (error) {
+                vscode.window.showErrorMessage(`Impossible de supprimer ${path.basename(p)}: ${error.message}`);
+            }
+        }
+        vscode.window.showInformationMessage(`${deleted} dossier(s) supprimé(s), ${formatBytes(freed)} libéré(s)`);
+        this._dirCache.clear();
+        this.refresh();
+    }
+    async exportCsv(rootPath) {
+        const all = await this.scanAllFiles(rootPath, 100000);
+        const lines = ["name,path,size_bytes,size_human,type,modified"];
+        for (const e of all) {
+            const row = [
+                JSON.stringify(e.name),
+                JSON.stringify(e.path),
+                String(e.size),
+                JSON.stringify(e.sizeText),
+                JSON.stringify(e.type),
+                JSON.stringify(new Date(e.mtime).toISOString())
+            ];
+            lines.push(row.join(","));
+        }
+        const csv = lines.join("\n");
+        const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+        const fileName = `project-size-${ts}.csv`;
+        const uri = await vscode.window.showSaveDialog({
+            defaultUri: vscode.Uri.file(path.join(os.homedir(), fileName)),
+            filters: { "CSV": ["csv"] }
+        });
+        if (!uri)
+            return;
+        try {
+            await fs.writeFile(uri.fsPath, csv, "utf-8");
+            vscode.window.showInformationMessage(`${all.length} fichiers exportés vers ${path.basename(uri.fsPath)}`, "Ouvrir").then(action => {
+                if (action === "Ouvrir") {
+                    vscode.commands.executeCommand("vscode.open", uri);
+                }
+            });
+        }
+        catch (error) {
+            vscode.window.showErrorMessage(`Export échoué: ${error.message}`);
+        }
+    }
+    async openSmartPreview(filePath) {
+        const ext = path.extname(filePath).toLowerCase();
+        const name = path.basename(filePath);
+        try {
+            const stat = await fs.stat(filePath);
+            if (stat.size > 50 * 1024 * 1024 && !WorkspaceSizesWebviewProvider.IMAGE_EXTS.includes(ext) && ext !== ".pdf") {
+                const action = await vscode.window.showWarningMessage(`${name} fait ${formatBytes(stat.size)}. Aperçu potentiellement lent.`, "Aperçu quand même", "Annuler");
+                if (action !== "Aperçu quand même")
+                    return;
+            }
+        }
+        catch {
+            // ignore
+        }
+        const panel = vscode.window.createWebviewPanel("pkvsconf.filePreview", `Preview · ${name}`, vscode.ViewColumn.Beside, {
+            enableScripts: true,
+            enableForms: true,
+            retainContextWhenHidden: false,
+            localResourceRoots: [vscode.Uri.file(path.dirname(filePath)), vscode.Uri.file(vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? path.dirname(filePath))]
+        });
+        panel.iconPath = vscode.Uri.file(path.join(vscode.extensions.getExtension("Cmondary.vs-pkvsconf")?.extensionPath ?? "", "icon.png"));
+        try {
+            if (WorkspaceSizesWebviewProvider.IMAGE_EXTS.includes(ext)) {
+                panel.webview.html = await this.buildImagePreview(filePath, panel);
+            }
+            else if (ext === ".html" || ext === ".htm") {
+                panel.webview.html = await this.buildHtmlPreview(filePath, panel);
+            }
+            else if (ext === ".php") {
+                panel.webview.html = await this.buildPhpPreview(filePath, panel);
+            }
+            else if (ext === ".md" || ext === ".markdown") {
+                panel.webview.html = await this.buildMarkdownPreview(filePath, panel);
+            }
+            else if (ext === ".pdf") {
+                panel.webview.html = await this.buildPdfPreview(filePath, panel);
+            }
+            else if (ext === ".json") {
+                panel.webview.html = await this.buildJsonPreview(filePath, panel);
+            }
+            else if (ext === ".csv" || ext === ".tsv") {
+                panel.webview.html = await this.buildCsvPreview(filePath, panel, ext === ".tsv");
+            }
+            else if (WorkspaceSizesWebviewProvider.VIDEO_EXTS.includes(ext)) {
+                panel.webview.html = await this.buildVideoPreview(filePath, panel);
+            }
+            else if (WorkspaceSizesWebviewProvider.AUDIO_EXTS.includes(ext)) {
+                panel.webview.html = await this.buildAudioPreview(filePath, panel);
+            }
+            else if (WorkspaceSizesWebviewProvider.CODE_EXTS.includes(ext)) {
+                panel.webview.html = await this.buildCodePreview(filePath, panel);
+            }
+            else if (WorkspaceSizesWebviewProvider.ARCHIVE_EXTS.includes(ext)) {
+                panel.webview.html = await this.buildArchivePreview(filePath, panel);
+            }
+            else if (ext === ".yaml" || ext === ".yml" || ext === ".toml" || ext === ".env" || ext.startsWith(".env")) {
+                panel.webview.html = await this.buildStructuredPreview(filePath, panel);
+            }
+            else {
+                panel.webview.html = await this.buildTextPreview(filePath, panel);
+            }
+        }
+        catch (error) {
+            panel.webview.html = `<!DOCTYPE html><html><body style="font-family:var(--vscode-font-family);padding:20px;color:var(--vscode-errorForeground)"><h2>Erreur d'aperçu</h2><pre>${escapeHtml(error.message)}</pre></body></html>`;
+        }
+        panel.onDidDispose(() => {
+            this.cleanupPhpServers();
+        });
+    }
+    async cleanupPhpServers() {
+        for (const [key, server] of this._phpServers) {
+            server.refCount -= 1;
+            if (server.refCount <= 0) {
+                try {
+                    server.proc.kill();
+                }
+                catch {
+                    // ignore
+                }
+                this._phpServers.delete(key);
+            }
+        }
+    }
+    async findOrStartPhpServer(docRoot) {
+        const existing = this._phpServers.get(docRoot);
+        if (existing) {
+            existing.refCount += 1;
+            return { port: existing.port, baseUrl: `http://localhost:${existing.port}` };
+        }
+        let phpBin = "php";
+        try {
+            await execAsync(`${phpBin} -v`);
+        }
+        catch {
+            const local = path.join(vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? "", "vendor", "bin", "php");
+            try {
+                await execAsync(`${local} -v`);
+                phpBin = local;
+            }
+            catch {
+                return undefined;
+            }
+        }
+        for (const port of WorkspaceSizesWebviewProvider.PHPSERVER_PORTS) {
+            try {
+                const inUse = await execAsync(`lsof -i :${port} -t`, { timeout: 800 }).then(o => o.stdout.trim());
+                if (inUse) {
+                    try {
+                        const resp = await execAsync(`curl -s -o /dev/null -w "%{http_code}" http://localhost:${port}/`, { timeout: 1500 });
+                        if (resp.stdout.trim().match(/^[2-4]\d\d$/)) {
+                            const server = { proc: {}, port, refCount: 1 };
+                            this._phpServers.set(docRoot, server);
+                            return { port, baseUrl: `http://localhost:${port}` };
+                        }
+                    }
+                    catch {
+                        continue;
+                    }
+                }
+            }
+            catch {
+                // port libre
+            }
+            try {
+                const proc = cp.spawn(phpBin, ["-S", `localhost:${port}`, "-t", docRoot], {
+                    stdio: "ignore",
+                    detached: false,
+                    cwd: docRoot
+                });
+                await new Promise(resolve => setTimeout(resolve, 400));
+                if (proc.exitCode !== null && proc.exitCode !== 0)
+                    continue;
+                this._phpServers.set(docRoot, { proc, port, refCount: 1 });
+                return { port, baseUrl: `http://localhost:${port}` };
+            }
+            catch {
+                continue;
+            }
+        }
+        return undefined;
+    }
+    previewShell(title, bodyHtml, cspSource, extraHead = "", script = "") {
+        const nonce = getNonce();
+        return `<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${cspSource} data: https:; media-src ${cspSource} blob: data: https:; style-src 'unsafe-inline' https://cdnjs.cloudflare.com ${cspSource}; script-src 'unsafe-inline' https://cdnjs.cloudflare.com 'nonce-${nonce}'; frame-src http: https:; font-src https://cdnjs.cloudflare.com data:;">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+    background: #1a1a1f;
+    color: #e4e4e7;
+    display: flex;
+    flex-direction: column;
+  }
+  .preview-topbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 14px;
+    background: #0f0f12;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    font-size: 12px;
+    flex-shrink: 0;
+  }
+  .preview-title { font-weight: 600; color: #fff; }
+  .preview-meta { color: #888; flex: 1; }
+  .preview-actions { display: flex; gap: 6px; }
+  .preview-actions button {
+    background: rgba(255,255,255,0.06);
+    color: #ddd;
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 6px;
+    padding: 4px 10px;
+    cursor: pointer;
+    font-size: 12px;
+  }
+  .preview-actions button:hover { background: rgba(255,255,255,0.12); }
+  .preview-body { flex: 1; overflow: auto; position: relative; min-height: 0; }
+  .preview-body::-webkit-scrollbar { width: 10px; height: 10px; }
+  .preview-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 5px; }
+  .empty {
+    padding: 40px;
+    text-align: center;
+    color: #888;
+    font-style: italic;
+  }
+</style>
+${extraHead}
+</head>
+<body>
+  <div class="preview-topbar">
+    <span class="preview-title">${escapeHtml(title)}</span>
+    <span class="preview-meta" id="meta"></span>
+    <div class="preview-actions" id="actions"></div>
+  </div>
+  <div class="preview-body" id="body">${bodyHtml}</div>
+  <script nonce="${nonce}">
+    ${script}
+  </script>
+</body>
+</html>`;
+    }
+    async buildImagePreview(filePath, panel) {
+        const uri = panel.webview.asWebviewUri(vscode.Uri.file(filePath));
+        const name = path.basename(filePath);
+        const stat = await fs.stat(filePath);
+        return this.previewShell(name, `
+      <div style="display:flex;align-items:center;justify-content:center;height:100%;padding:20px;background:repeating-conic-gradient(#2a2a2a 0% 25%, #1a1a1f 0% 50%) 50%/24px 24px;">
+        <img id="img" src="${uri}" alt="${escapeHtml(name)}" style="max-width:100%;max-height:100%;object-fit:contain;border-radius:4px;box-shadow:0 8px 30px rgba(0,0,0,0.5);cursor:zoom-in;transition:transform 0.2s ease;" />
+      </div>
+    `, panel.webview.cspSource, "", `
+      document.getElementById('meta').textContent = '${escapeHtml(formatBytes(stat.size))}';
+      const img = document.getElementById('img');
+      let zoomed = false;
+      img.addEventListener('click', () => {
+        zoomed = !zoomed;
+        img.style.transform = zoomed ? 'scale(2)' : 'scale(1)';
+        img.style.cursor = zoomed ? 'zoom-out' : 'zoom-in';
+      });
+      img.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const cur = parseFloat(img.style.transform.match(/scale\\(([^)]+)\\)/)?.[1] ?? '1');
+        const next = Math.max(0.2, Math.min(8, cur + (e.deltaY < 0 ? 0.2 : -0.2)));
+        img.style.transform = 'scale(' + next + ')';
+        img.style.cursor = next > 1 ? 'zoom-out' : 'zoom-in';
+      });
+    `);
+    }
+    async buildHtmlPreview(filePath, panel) {
+        const uri = panel.webview.asWebviewUri(vscode.Uri.file(filePath));
+        const name = path.basename(filePath);
+        const stat = await fs.stat(filePath);
+        const content = await fs.readFile(filePath, "utf-8");
+        const hasScripts = /<script/i.test(content);
+        const bodyHtml = hasScripts
+            ? `<iframe src="${uri}" style="width:100%;height:100%;border:0;background:#fff;" sandbox="allow-scripts allow-same-origin allow-forms allow-popups"></iframe>`
+            : `<iframe srcdoc="${escapeAttr(content)}" style="width:100%;height:100%;border:0;background:#fff;" sandbox="allow-same-origin allow-popups"></iframe>`;
+        return this.previewShell(name, bodyHtml, panel.webview.cspSource, "", `document.getElementById('meta').textContent = '${escapeHtml(formatBytes(stat.size))}';`);
+    }
+    async buildPhpPreview(filePath, panel) {
+        const wsRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        const name = path.basename(filePath);
+        let docRoot = wsRoot ?? path.dirname(filePath);
+        const candidates = [
+            path.join(wsRoot ?? "", "public"),
+            wsRoot ?? "",
+            path.dirname(filePath)
+        ];
+        for (const c of candidates) {
+            try {
+                const s = await fs.stat(c);
+                if (s.isDirectory()) {
+                    docRoot = c;
+                    break;
+                }
+            }
+            catch { /* skip */ }
+        }
+        const server = await this.findOrStartPhpServer(docRoot);
+        if (!server) {
+            return this.buildCodePreview(filePath, panel, "PHP server introuvable — affichage du code source.");
+        }
+        const relPath = path.relative(docRoot, filePath);
+        const previewUrl = `${server.baseUrl}/${relPath.split(path.sep).join("/")}`;
+        return this.previewShell(name, `
+      <iframe src="${previewUrl}" style="width:100%;height:100%;border:0;background:#fff;" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"></iframe>
+    `, panel.webview.cspSource, "", `document.getElementById('meta').textContent = '${escapeHtml(previewUrl)}';`);
+    }
+    async buildMarkdownPreview(filePath, panel) {
+        const content = await fs.readFile(filePath, "utf-8");
+        const stat = await fs.stat(filePath);
+        const name = path.basename(filePath);
+        const html = this.markdownToHtml(content);
+        return this.previewShell(name, `
+      <div class="md-body" style="padding:32px 48px;max-width:880px;margin:0 auto;line-height:1.65;font-size:15px;">
+        ${html}
+      </div>
+    `, panel.webview.cspSource, `
+    <style>
+      .md-body h1, .md-body h2, .md-body h3, .md-body h4 { color:#fff; margin:1.4em 0 0.5em; line-height:1.2; }
+      .md-body h1 { font-size:2em; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:0.3em; }
+      .md-body h2 { font-size:1.5em; border-bottom:1px solid rgba(255,255,255,0.06); padding-bottom:0.2em; }
+      .md-body h3 { font-size:1.25em; }
+      .md-body a { color:#58a6ff; text-decoration:none; }
+      .md-body a:hover { text-decoration:underline; }
+      .md-body code { background:rgba(255,255,255,0.08); padding:2px 6px; border-radius:4px; font-family:ui-monospace,Menlo,monospace; font-size:0.9em; }
+      .md-body pre { background:#0d1117; padding:14px; border-radius:8px; overflow:auto; border:1px solid rgba(255,255,255,0.08); }
+      .md-body pre code { background:transparent; padding:0; }
+      .md-body blockquote { border-left:3px solid rgba(88,166,255,0.5); padding-left:14px; color:#999; margin:1em 0; }
+      .md-body ul, .md-body ol { padding-left:24px; }
+      .md-body li { margin:0.3em 0; }
+      .md-body table { border-collapse:collapse; margin:1em 0; }
+      .md-body td, .md-body th { border:1px solid rgba(255,255,255,0.15); padding:6px 12px; }
+      .md-body th { background:rgba(255,255,255,0.05); }
+      .md-body hr { border:0; border-top:1px solid rgba(255,255,255,0.1); margin:1.5em 0; }
+      .md-body img { max-width:100%; border-radius:6px; }
+    </style>
+    `, `document.getElementById('meta').textContent = '${escapeHtml(formatBytes(stat.size))}';`);
+    }
+    markdownToHtml(md) {
+        let html = escapeHtml(md);
+        html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => `<pre><code class="language-${lang}">${code}</code></pre>`);
+        html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
+        html = html.replace(/^###### (.+)$/gm, "<h6>$1</h6>");
+        html = html.replace(/^##### (.+)$/gm, "<h5>$1</h5>");
+        html = html.replace(/^#### (.+)$/gm, "<h4>$1</h4>");
+        html = html.replace(/^### (.+)$/gm, "<h3>$1</h3>");
+        html = html.replace(/^## (.+)$/gm, "<h2>$1</h2>");
+        html = html.replace(/^# (.+)$/gm, "<h1>$1</h1>");
+        html = html.replace(/^&gt; (.+)$/gm, "<blockquote>$1</blockquote>");
+        html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+        html = html.replace(/\*([^*]+)\*/g, "<em>$1</em>");
+        html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img alt="$1" src="$2">');
+        html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+        html = html.replace(/^---$/gm, "<hr>");
+        html = html.replace(/^\s*[-*] (.+)$/gm, "<li>$1</li>");
+        html = html.replace(/(<li>[\s\S]+?<\/li>)/g, "<ul>$1</ul>");
+        html = html.replace(/<\/ul>\s*<ul>/g, "");
+        html = html.replace(/\n\n/g, "</p><p>");
+        html = `<p>${html}</p>`;
+        html = html.replace(/<p>(<(?:h[1-6]|pre|ul|ol|blockquote|hr|table|img))/g, "$1");
+        html = html.replace(/(<\/(?:h[1-6]|pre|ul|ol|blockquote|hr|table|img)>)<\/p>/g, "$1");
+        return html;
+    }
+    async buildPdfPreview(filePath, panel) {
+        const uri = panel.webview.asWebviewUri(vscode.Uri.file(filePath));
+        const name = path.basename(filePath);
+        const stat = await fs.stat(filePath);
+        return this.previewShell(name, `
+      <embed src="${uri}" type="application/pdf" style="width:100%;height:100%;border:0;" />
+    `, panel.webview.cspSource, "", `document.getElementById('meta').textContent = '${escapeHtml(formatBytes(stat.size))}';`);
+    }
+    async buildJsonPreview(filePath, panel) {
+        const raw = await fs.readFile(filePath, "utf-8");
+        const stat = await fs.stat(filePath);
+        const name = path.basename(filePath);
+        let parsed;
+        let parseError = "";
+        try {
+            parsed = JSON.parse(raw);
+        }
+        catch (e) {
+            parseError = e.message;
+        }
+        const pretty = parsed !== undefined ? JSON.stringify(parsed, null, 2) : raw;
+        const escaped = escapeHtml(pretty);
+        return this.previewShell(name, `
+      <div style="padding:16px;">
+        ${parseError ? `<div style="color:#f87171;margin-bottom:12px;">JSON invalide: ${escapeHtml(parseError)}</div>` : ""}
+        <div id="json-tree" style="font-family:ui-monospace,Menlo,monospace;font-size:13px;line-height:1.5;white-space:pre-wrap;"></div>
+        <pre style="display:none;" id="json-raw">${escaped}</pre>
+      </div>
+    `, panel.webview.cspSource, "", `
+      document.getElementById('meta').textContent = '${escapeHtml(formatBytes(stat.size))}';
+      const tree = document.getElementById('json-tree');
+      const raw = document.getElementById('json-raw');
+      let treeMode = true;
+      function renderTree(obj, depth) {
+        if (depth > 12) return '<span style="color:#888">…</span>';
+        if (obj === null) return '<span style="color:#f87171">null</span>';
+        if (typeof obj === 'string') return '<span style="color:#a5d6a7">"' + obj.replace(/</g,'&lt;') + '"</span>';
+        if (typeof obj === 'number') return '<span style="color:#fbbf24">' + obj + '</span>';
+        if (typeof obj === 'boolean') return '<span style="color:#60a5fa">' + obj + '</span>';
+        const entries = Array.isArray(obj) ? obj.map((v,i) => [i,v]) : Object.entries(obj);
+        if (entries.length === 0) return Array.isArray(obj) ? '[]' : '{}';
+        const items = entries.map(([k,v]) => {
+          const isArr = Array.isArray(obj);
+          const keyStr = isArr ? '<span style="color:#fbbf24">' + k + '</span>' : '<span style="color:#7dd3fc">"' + k + '"</span>';
+          return '<div style="margin-left:18px;">' + keyStr + ': ' + renderTree(v, depth+1) + (entries[entries.length-1][0] !== k ? ',' : '') + '</div>';
+        }).join('');
+        return (Array.isArray(obj) ? '[' : '{') + items + (Array.isArray(obj) ? ']' : '}');
+      }
+      try {
+        tree.innerHTML = renderTree(${JSON.stringify(parsed === undefined ? null : parsed)}, 0);
+      } catch (e) {
+        tree.innerHTML = '<span style="color:#f87171">Erreur de rendu</span>';
+      }
+      const btn = document.createElement('button');
+      btn.textContent = 'Vue brute';
+      btn.onclick = () => {
+        treeMode = !treeMode;
+        tree.style.display = treeMode ? '' : 'none';
+        raw.style.display = treeMode ? 'none' : '';
+        btn.textContent = treeMode ? 'Vue brute' : 'Vue arbre';
+      };
+      document.getElementById('actions').appendChild(btn);
+    `);
+    }
+    async buildCsvPreview(filePath, panel, tsv) {
+        const raw = await fs.readFile(filePath, "utf-8");
+        const stat = await fs.stat(filePath);
+        const name = path.basename(filePath);
+        const sep = tsv ? "\t" : ",";
+        const rows = this.parseCsv(raw, sep);
+        const tableHtml = rows.map((row, i) => {
+            const cells = row.map(c => (i === 0 ? `<th>${escapeHtml(c)}</th>` : `<td>${escapeHtml(c)}</td>`)).join("");
+            return `<tr>${cells}</tr>`;
+        }).join("");
+        return this.previewShell(name, `
+      <div style="padding:12px;">
+        <div style="margin-bottom:8px;color:#888;font-size:12px;">${rows.length} ligne(s) · ${rows[0]?.length ?? 0} colonne(s)</div>
+        <div style="overflow:auto;border:1px solid rgba(255,255,255,0.1);border-radius:6px;">
+          <table style="border-collapse:collapse;font-size:12px;width:100%;">
+            <thead>
+              <tr style="background:#0f0f12;position:sticky;top:0;">${rows[0]?.map((c) => `<th style="padding:6px 10px;text-align:left;border-bottom:1px solid rgba(255,255,255,0.1);color:#fff;">${escapeHtml(c)}</th>`).join("")}</tr>
+            </thead>
+            <tbody>
+              ${rows.slice(1).map((row) => `<tr style="border-bottom:1px solid rgba(255,255,255,0.04);">${row.map((c) => `<td style="padding:5px 10px;">${escapeHtml(c)}</td>`).join("")}</tr>`).join("")}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `, panel.webview.cspSource, "", `document.getElementById('meta').textContent = '${escapeHtml(formatBytes(stat.size))}';`);
+    }
+    parseCsv(text, sep) {
+        const rows = [];
+        let row = [];
+        let cur = "";
+        let inQuotes = false;
+        for (let i = 0; i < text.length; i++) {
+            const c = text[i];
+            if (inQuotes) {
+                if (c === '"') {
+                    if (text[i + 1] === '"') {
+                        cur += '"';
+                        i++;
+                    }
+                    else
+                        inQuotes = false;
+                }
+                else
+                    cur += c;
+            }
+            else {
+                if (c === '"')
+                    inQuotes = true;
+                else if (c === sep) {
+                    row.push(cur);
+                    cur = "";
+                }
+                else if (c === "\n") {
+                    row.push(cur);
+                    rows.push(row);
+                    row = [];
+                    cur = "";
+                }
+                else if (c === "\r") { /* skip */ }
+                else
+                    cur += c;
+            }
+        }
+        if (cur || row.length) {
+            row.push(cur);
+            rows.push(row);
+        }
+        return rows;
+    }
+    async buildVideoPreview(filePath, panel) {
+        const uri = panel.webview.asWebviewUri(vscode.Uri.file(filePath));
+        const name = path.basename(filePath);
+        const stat = await fs.stat(filePath);
+        return this.previewShell(name, `
+      <div style="display:flex;align-items:center;justify-content:center;height:100%;background:#000;">
+        <video src="${uri}" controls autoplay style="max-width:100%;max-height:100%;" />
+      </div>
+    `, panel.webview.cspSource, "", `document.getElementById('meta').textContent = '${escapeHtml(formatBytes(stat.size))}';`);
+    }
+    async buildAudioPreview(filePath, panel) {
+        const uri = panel.webview.asWebviewUri(vscode.Uri.file(filePath));
+        const name = path.basename(filePath);
+        const stat = await fs.stat(filePath);
+        return this.previewShell(name, `
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:24px;background:linear-gradient(135deg,#1a1a2e,#16213e);">
+        <div style="width:200px;height:200px;border-radius:50%;background:linear-gradient(135deg,#58a6ff,#bc8cff);display:flex;align-items:center;justify-content:center;font-size:80px;box-shadow:0 20px 60px rgba(88,166,255,0.3);">
+          🎵
+        </div>
+        <div style="font-size:18px;font-weight:600;color:#fff;">${escapeHtml(name)}</div>
+        <audio src="${uri}" controls autoplay style="width:80%;max-width:500px;" />
+      </div>
+    `, panel.webview.cspSource, "", `document.getElementById('meta').textContent = '${escapeHtml(formatBytes(stat.size))}';`);
+    }
+    async buildCodePreview(filePath, panel, notice = "") {
+        const raw = await fs.readFile(filePath, "utf-8");
+        const stat = await fs.stat(filePath);
+        const name = path.basename(filePath);
+        const ext = path.extname(filePath).slice(1);
+        const escaped = escapeHtml(raw);
+        return this.previewShell(name, `
+      ${notice ? `<div style="padding:10px 14px;background:rgba(251,191,36,0.1);color:#fbbf24;font-size:12px;border-bottom:1px solid rgba(251,191,36,0.2);">${escapeHtml(notice)}</div>` : ""}
+      <pre style="margin:0;padding:16px;font-family:ui-monospace,Menlo,Monaco,monospace;font-size:13px;line-height:1.55;overflow:auto;counter-reset:line;"><code class="language-${ext}" id="code">${escaped}</code></pre>
+    `, panel.webview.cspSource, "", `
+      document.getElementById('meta').textContent = '${escapeHtml(formatBytes(stat.size))}';
+      if (window.hljs) {
+        const code = document.getElementById('code');
+        code.textContent = code.textContent;
+        delete code.dataset.highlighted;
+        hljs.highlightElement(code);
+      }
+    `);
+    }
+    async buildTextPreview(filePath, panel) {
+        const raw = await fs.readFile(filePath, "utf-8");
+        const stat = await fs.stat(filePath);
+        const name = path.basename(filePath);
+        const lines = raw.split(/\r?\n/);
+        const preview = lines.slice(0, 500).join("\n");
+        const truncated = lines.length > 500;
+        return this.previewShell(name, `
+      <div style="padding:16px;">
+        ${truncated ? `<div style="color:#888;margin-bottom:8px;font-size:12px;">Affichage des 500 premières lignes sur ${lines.length}</div>` : ""}
+        <pre style="margin:0;font-family:ui-monospace,Menlo,Monaco,monospace;font-size:13px;line-height:1.55;white-space:pre-wrap;word-break:break-word;color:#d4d4d4;">${escapeHtml(preview)}</pre>
+      </div>
+    `, panel.webview.cspSource, "", `document.getElementById('meta').textContent = '${escapeHtml(formatBytes(stat.size))}';`);
+    }
+    async buildArchivePreview(filePath, panel) {
+        const name = path.basename(filePath);
+        const ext = path.extname(filePath).toLowerCase();
+        const stat = await fs.stat(filePath);
+        let listing = "";
+        try {
+            if (ext === ".zip") {
+                const { stdout } = await execAsync(`unzip -l "${filePath}"`, { maxBuffer: 5 * 1024 * 1024 });
+                listing = stdout;
+            }
+            else if (ext === ".tar" || ext === ".tgz" || ext === ".gz") {
+                const { stdout } = await execAsync(`tar -tvf "${filePath}"`, { maxBuffer: 5 * 1024 * 1024 });
+                listing = stdout;
+            }
+            else if (ext === ".7z") {
+                const { stdout } = await execAsync(`7z l "${filePath}"`, { maxBuffer: 5 * 1024 * 1024 });
+                listing = stdout;
+            }
+            else if (ext === ".rar") {
+                const { stdout } = await execAsync(`unrar l "${filePath}"`, { maxBuffer: 5 * 1024 * 1024 });
+                listing = stdout;
+            }
+            else {
+                listing = "Format d'archive non supporté pour le listing.";
+            }
+        }
+        catch (e) {
+            listing = `Impossible de lister l'archive: ${e.message}`;
+        }
+        return this.previewShell(name, `
+      <div style="padding:16px;">
+        <div style="color:#888;margin-bottom:10px;font-size:12px;">Contenu de l'archive (${formatBytes(stat.size)})</div>
+        <pre style="margin:0;font-family:ui-monospace,Menlo,Monaco,monospace;font-size:12px;line-height:1.5;white-space:pre-wrap;color:#d4d4d4;">${escapeHtml(listing)}</pre>
+      </div>
+    `, panel.webview.cspSource, "", `document.getElementById('meta').textContent = '${escapeHtml(formatBytes(stat.size))}';`);
+    }
+    async buildStructuredPreview(filePath, panel) {
+        const raw = await fs.readFile(filePath, "utf-8");
+        const stat = await fs.stat(filePath);
+        const name = path.basename(filePath);
+        const ext = path.extname(filePath).toLowerCase();
+        const lines = raw.split(/\r?\n/).filter(l => l.trim() && !l.trim().startsWith("#"));
+        const isToml = ext === ".toml";
+        const rows = [];
+        let currentSection = "";
+        for (const line of lines) {
+            const trimmed = line.trim();
+            if (isToml && /^\[.+\]$/.test(trimmed)) {
+                currentSection = trimmed.slice(1, -1);
+                continue;
+            }
+            const m = trimmed.match(/^([^=:]+?)[=:](.*)$/);
+            if (m) {
+                const key = (currentSection ? currentSection + "." : "") + m[1].trim();
+                rows.push({ key, value: m[2].trim().replace(/^["']|["']$/g, "") });
+            }
+        }
+        return this.previewShell(name, `
+      <div style="padding:16px;">
+        <div style="color:#888;margin-bottom:10px;font-size:12px;">${rows.length} entrée(s)</div>
+        <table style="width:100%;border-collapse:collapse;font-family:ui-monospace,Menlo,monospace;font-size:12px;">
+          ${rows.map(r => `<tr style="border-bottom:1px solid rgba(255,255,255,0.06);"><td style="padding:5px 10px;color:#7dd3fc;width:40%;vertical-align:top;">${escapeHtml(r.key)}</td><td style="padding:5px 10px;color:#a5d6a7;">${escapeHtml(r.value)}</td></tr>`).join("")}
+        </table>
+      </div>
+    `, panel.webview.cspSource, "", `document.getElementById('meta').textContent = '${escapeHtml(formatBytes(stat.size))}';`);
+    }
+    getHtml(cspSource, rootPath, rootName, filter, totalBytes) {
+        const nonce = getNonce();
+        return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline' ${cspSource}; script-src 'nonce-${nonce}';">
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; }
+  body {
+    font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+    font-size: var(--vscode-font-size, 13px);
+    background: var(--vscode-sideBar-background, transparent);
+    color: var(--vscode-foreground, #cccccc);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .modebar {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 4px 6px;
+    border-bottom: 1px solid var(--vscode-editorWidget-border, rgba(128,128,128,0.2));
+    flex-shrink: 0;
+    background: var(--vscode-editorWidget-background, rgba(128,128,128,0.04));
+  }
+  .mode-btn {
+    background: transparent;
+    border: 0;
+    color: var(--vscode-foreground, #cccccc);
+    padding: 4px 8px;
+    font-size: 11px;
+    border-radius: 3px;
+    cursor: pointer;
+    white-space: nowrap;
+    opacity: 0.7;
+  }
+  .mode-btn:hover { background: var(--vscode-toolbar-hoverBackground, rgba(128,128,128,0.15)); opacity: 1; }
+  .mode-btn.active { background: var(--vscode-button-background, #0e639c); color: var(--vscode-button-foreground, #fff); opacity: 1; }
+  .toolbar {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--vscode-editorWidget-border, rgba(128,128,128,0.2));
+    flex-shrink: 0;
+  }
+  .toolbar input {
+    flex: 1;
+    min-width: 0;
+    height: 24px;
+    border: 1px solid var(--vscode-input-border, transparent);
+    background: var(--vscode-input-background, rgba(0,0,0,0.2));
+    color: var(--vscode-input-foreground, #cccccc);
+    border-radius: 2px;
+    padding: 0 6px;
+    font-size: 12px;
+    font-family: inherit;
+    outline: none;
+  }
+  .toolbar input:focus { border-color: var(--vscode-focusBorder, #007acc); }
+  .toolbar input::placeholder { color: var(--vscode-input-placeholderForeground, rgba(204,204,204,0.5)); }
+  .toolbar button {
+    background: transparent;
+    border: none;
+    color: var(--vscode-foreground, #cccccc);
+    cursor: pointer;
+    padding: 4px 6px;
+    border-radius: 2px;
+    font-size: 13px;
+    line-height: 1;
+    opacity: 0.8;
+  }
+  .toolbar button:hover { background: var(--vscode-toolbar-hoverBackground, rgba(128,128,128,0.15)); opacity: 1; }
+  .view-body { flex: 1; overflow: auto; padding: 4px 0; user-select: none; }
+  .row {
+    display: flex;
+    align-items: center;
+    height: 22px;
+    padding-right: 8px;
+    cursor: pointer;
+    white-space: nowrap;
+    color: var(--vscode-foreground, #cccccc);
+  }
+  .row:hover { background: var(--vscode-list-hoverBackground, rgba(128,128,128,0.1)); }
+  .row.focused { background: var(--vscode-list-activeSelectionBackground, #094771); color: var(--vscode-list-activeSelectionForeground, #ffffff); }
+  .row .chevron {
+    width: 16px;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--vscode-descriptionForeground, #888);
+    font-size: 10px;
+    transition: transform 0.1s ease;
+  }
+  .row .chevron.collapsed { transform: rotate(-90deg); }
+  .row .chevron.empty { visibility: hidden; }
+  .row .icon {
+    width: 16px;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    margin-right: 4px;
+  }
+  .row .name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .row .size {
+    color: var(--vscode-descriptionForeground, #888);
+    font-size: 11px;
+    margin-left: 8px;
+    flex-shrink: 0;
+    font-variant-numeric: tabular-nums;
+  }
+  .children { display: block; }
+  .children.hidden { display: none; }
+  .empty { padding: 20px 12px; text-align: center; color: var(--vscode-descriptionForeground, #888); font-style: italic; font-size: 12px; }
+  .loading { padding: 8px 12px; color: var(--vscode-descriptionForeground, #888); font-size: 11px; }
+</style>
+</head>
+<body>
+  <div class="modebar">
+    <button class="mode-btn active" data-mode="tree" title="Vue arborescente">🗂️ Arbre</button>
+    <button class="mode-btn" data-mode="top" title="Top 50 plus gros fichiers">🏆 Top 50</button>
+    <button class="mode-btn" data-mode="cleanup" title="Dossiers nettoyables">🧹 Cleanup</button>
+    <span style="flex:1"></span>
+    <button class="mode-btn" id="exportCsvBtn" title="Exporter en CSV">📤</button>
+  </div>
+  <div class="toolbar">
+    <input type="text" id="filter" placeholder="Filtrer..." value="${escapeAttr(filter)}" />
+    <button id="refreshBtn" title="Rafraîchir">↻</button>
+  </div>
+  <div class="view-body" id="viewBody">
+    <div class="loading">Chargement...</div>
+  </div>
+  <script nonce="${nonce}">
+    const vscode = acquireVsCodeApi();
+    const tree = document.getElementById('viewBody');
+    const filterInput = document.getElementById('filter');
+    const refreshBtn = document.getElementById('refreshBtn');
+    const exportCsvBtn = document.getElementById('exportCsvBtn');
+    const ROOT_PATH = ${JSON.stringify(rootPath)};
+    let filterValue = ${JSON.stringify(filter)};
+    const loadingPaths = new Set();
+    let currentMode = 'tree';
+
+    function getFileIcon(name, isDir) {
+      if (isDir) return '📁';
+      const ext = name.split('.').pop().toLowerCase();
+      const icons = {
+        js:'📜',ts:'📜',jsx:'📜',tsx:'📜',json:'🔧',md:'📝',txt:'📄',html:'🌐',css:'🎨',
+        png:'🖼️',jpg:'🖼️',jpeg:'🖼️',gif:'🖼️',svg:'🖼️',ico:'🖼️',
+        mp4:'🎬',webm:'🎬',mov:'🎬',mp3:'🎵',wav:'🎵',
+        zip:'📦',tar:'📦',gz:'📦',pdf:'📕',yml:'⚙️',yaml:'⚙️',sh:'🔧'
+      };
+      return icons[ext] || '📄';
+    }
+
+    function matchesFilter(name) {
+      if (!filterValue) return true;
+      return name.toLowerCase().includes(filterValue.toLowerCase());
+    }
+
+    function sizeColor(bytes, maxBytes) {
+      if (!bytes || bytes < 1024 || !maxBytes) return '';
+      const ratio = bytes / maxBytes;
+      if (ratio < 0.02) return '';
+      const clamped = Math.min(Math.max(ratio, 0), 1);
+      const hue = 120 * (1 - clamped);
+      const sat = 55 + clamped * 25;
+      return 'hsl(' + hue.toFixed(0) + ',' + sat.toFixed(0) + '%,58%)';
+    }
+
+    function createRow(entry, depth, maxBytes) {
+      const row = document.createElement('div');
+      row.className = 'row';
+      row.style.paddingLeft = (depth * 12 + 4) + 'px';
+      row.dataset.path = entry.path;
+      row.title = entry.path + ' (' + entry.sizeText + ')';
+
+      const chevron = document.createElement('span');
+      chevron.className = 'chevron empty';
+      chevron.textContent = '▼';
+      row.appendChild(chevron);
+
+      const icon = document.createElement('span');
+      icon.className = 'icon';
+      if (entry.iconUrl) {
+        const img = document.createElement('img');
+        img.src = entry.iconUrl;
+        img.style.cssText = 'width:16px;height:16px;object-fit:contain;';
+        icon.appendChild(img);
+      } else {
+        icon.textContent = getFileIcon(entry.name, entry.isDirectory);
+      }
+      row.appendChild(icon);
+
+      const name = document.createElement('span');
+      name.className = 'name';
+      name.textContent = entry.name;
+      row.appendChild(name);
+
+      const size = document.createElement('span');
+      size.className = 'size';
+      size.textContent = entry.sizeText;
+      const color = sizeColor(entry.size, maxBytes);
+      if (color) size.style.color = color;
+      row.appendChild(size);
+
+      if (entry.isDirectory) {
+        chevron.classList.remove('empty');
+        chevron.classList.add('collapsed');
+        row.addEventListener('click', (e) => {
+          e.stopPropagation();
+          toggleFolder(row, entry, depth);
+        });
+      } else {
+        row.addEventListener('click', () => {
+          vscode.postMessage({ command: 'preview', path: entry.path });
+        });
+      }
+
+      row.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        vscode.postMessage({ command: 'reveal', path: entry.path });
+      });
+
+      return row;
+    }
+
+    function toggleFolder(row, entry, depth) {
+      const chevron = row.querySelector('.chevron');
+      let children = row.nextElementSibling;
+      if (children && children.classList.contains('children') && children.dataset.parent === entry.path) {
+        const hidden = children.classList.toggle('hidden');
+        chevron.classList.toggle('collapsed', hidden);
+        return;
+      }
+      if (loadingPaths.has(entry.path)) return;
+      loadingPaths.add(entry.path);
+      chevron.classList.remove('collapsed');
+      const loading = document.createElement('div');
+      loading.className = 'children loading';
+      loading.dataset.parent = entry.path;
+      loading.textContent = 'Chargement...';
+      row.after(loading);
+
+      const handler = (event) => {
+        const msg = event.data;
+        if (msg.command === 'children' && msg.parentPath === entry.path) {
+          window.removeEventListener('message', handler);
+          loadingPaths.delete(entry.path);
+          loading.innerHTML = '';
+          if (msg.children.length === 0) {
+            chevron.classList.add('empty');
+            loading.remove();
+            return;
+          }
+          const visible = msg.children.filter(c => matchesFilter(c.name));
+          const maxBytes = visible.reduce((m, c) => Math.max(m, c.size || 0), 0);
+          if (visible.length === 0) {
+            loading.innerHTML = '<div class="empty">Aucun résultat</div>';
+            return;
+          }
+          visible.forEach(child => loading.appendChild(createRow(child, depth + 1, maxBytes)));
+        }
+      };
+      window.addEventListener('message', handler);
+      vscode.postMessage({ command: 'expand', path: entry.path });
+    }
+
+    function loadRoot() {
+      tree.innerHTML = '';
+      const handler = (event) => {
+        const msg = event.data;
+        if (msg.command === 'children' && msg.parentPath === ROOT_PATH) {
+          window.removeEventListener('message', handler);
+          tree.innerHTML = '';
+          if (msg.children.length === 0) {
+            tree.innerHTML = '<div class="empty">Workspace vide</div>';
+            return;
+          }
+          const visible = msg.children.filter(c => matchesFilter(c.name));
+          const maxBytes = visible.reduce((m, c) => Math.max(m, c.size || 0), 0);
+          if (visible.length === 0) {
+            tree.innerHTML = '<div class="empty">Aucun résultat</div>';
+            return;
+          }
+          visible.forEach(child => tree.appendChild(createRow(child, 0, maxBytes)));
+        }
+      };
+      window.addEventListener('message', handler);
+      vscode.postMessage({ command: 'expand', path: ROOT_PATH });
+    }
+
+    let filterTimer = null;
+    filterInput.addEventListener('input', () => {
+      clearTimeout(filterTimer);
+      filterValue = filterInput.value;
+      filterTimer = setTimeout(() => {
+        if (currentMode === 'tree') loadRoot();
+        else if (currentMode === 'top') loadTopFiles();
+      }, 200);
+    });
+
+    refreshBtn.addEventListener('click', () => {
+      filterValue = '';
+      filterInput.value = '';
+      vscode.postMessage({ command: 'refresh' });
+    });
+
+    exportCsvBtn.addEventListener('click', () => {
+      exportCsvBtn.textContent = '⏳';
+      vscode.postMessage({ command: 'exportCsv' });
+      setTimeout(() => { exportCsvBtn.textContent = '📤'; }, 2000);
+    });
+
+    document.querySelectorAll('.mode-btn[data-mode]').forEach(btn => {
+      btn.addEventListener('click', () => switchMode(btn.dataset.mode));
+    });
+
+    function switchMode(mode) {
+      currentMode = mode;
+      document.querySelectorAll('.mode-btn[data-mode]').forEach(b => {
+        b.classList.toggle('active', b.dataset.mode === mode);
+      });
+      tree.innerHTML = '<div class="loading">Chargement...</div>';
+      if (mode === 'tree') loadRoot();
+      else if (mode === 'top') loadTopFiles();
+      else if (mode === 'cleanup') loadCleanup();
+    }
+
+    function escapeHtmlC(s) {
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+    function formatBytesC(b) {
+      if (!b) return '0 B';
+      const u = ['B','KB','MB','GB','TB'];
+      let i = 0, s = b;
+      while (s >= 1024 && i < u.length-1) { s /= 1024; i++; }
+      return s.toFixed(s < 10 ? 1 : 0) + ' ' + u[i];
+    }
+
+    function loadTopFiles() {
+      tree.innerHTML = '<div class="loading">Scan récursif en cours...</div>';
+      vscode.postMessage({ command: 'topFiles' });
+    }
+
+    function loadCleanup() {
+      tree.innerHTML = '<div class="loading">Détection des dossiers nettoyables...</div>';
+      vscode.postMessage({ command: 'cleanup' });
+    }
+
+    function renderTopFiles(items) {
+      tree.innerHTML = '';
+      if (!items.length) { tree.innerHTML = '<div class="empty">Aucun fichier</div>'; return; }
+      const maxBytes = items[0].size || 1;
+      items.forEach((entry, i) => {
+        const row = createRow(entry, 0, maxBytes);
+        const rank = document.createElement('span');
+        rank.style.cssText = 'color:var(--vscode-descriptionForeground);font-size:10px;width:24px;flex-shrink:0;text-align:right;margin-right:4px;';
+        rank.textContent = '#' + (i + 1);
+        row.insertBefore(rank, row.firstChild);
+        tree.appendChild(row);
+      });
+    }
+
+    function renderCleanup(items) {
+      tree.innerHTML = '';
+      if (!items.length) { tree.innerHTML = '<div class="empty">Aucun dossier nettoyable 🎉</div>'; return; }
+      const header = document.createElement('div');
+      header.style.cssText = 'padding:8px 10px;font-size:11px;color:var(--vscode-descriptionForeground);border-bottom:1px solid var(--vscode-editorWidget-border);display:flex;justify-content:space-between;align-items:center;';
+      const totalBytes = items.reduce((s, i) => s + i.size, 0);
+      const span = document.createElement('span');
+      span.textContent = items.length + ' dossier(s) · ' + formatBytesC(totalBytes) + ' récupérable(s)';
+      header.appendChild(span);
+      const delBtn = document.createElement('button');
+      delBtn.textContent = 'Tout supprimer';
+      delBtn.style.cssText = 'background:var(--vscode-errorForeground,#f14c4c);color:#fff;border:0;padding:3px 8px;border-radius:3px;cursor:pointer;font-size:11px;';
+      delBtn.addEventListener('click', () => {
+        if (confirm('Supprimer ' + items.length + ' dossier(s) ? Action irréversible.')) {
+          vscode.postMessage({ command: 'cleanupDelete', paths: items.map(function(i) { return i.path; }) });
+        }
+      });
+      header.appendChild(delBtn);
+      tree.appendChild(header);
+
+      const maxBytes = Math.max.apply(null, items.map(function(i) { return i.size; }).concat([1]));
+      items.forEach(function(item) {
+        const row = document.createElement('div');
+        row.className = 'row';
+        row.style.paddingLeft = '4px';
+        var color = sizeColor(item.size, maxBytes) || 'var(--vscode-descriptionForeground)';
+        var iconSpan = document.createElement('span');
+        iconSpan.className = 'icon';
+        iconSpan.textContent = '🗑️';
+        var nameSpan = document.createElement('span');
+        nameSpan.className = 'name';
+        nameSpan.title = item.path;
+        nameSpan.textContent = item.name;
+        var sizeSpan = document.createElement('span');
+        sizeSpan.className = 'size';
+        sizeSpan.style.color = color;
+        sizeSpan.textContent = item.sizeText;
+        var del = document.createElement('button');
+        del.textContent = '×';
+        del.style.cssText = 'background:rgba(244,63,94,0.15);color:#f87171;border:0;width:20px;height:20px;border-radius:3px;cursor:pointer;margin-left:6px;';
+        del.title = 'Supprimer';
+        del.addEventListener('click', function(e) {
+          e.stopPropagation();
+          if (confirm('Supprimer ' + item.name + ' (' + item.sizeText + ') ?')) {
+            vscode.postMessage({ command: 'cleanupDelete', paths: [item.path] });
+          }
+        });
+        row.appendChild(iconSpan);
+        row.appendChild(nameSpan);
+        row.appendChild(sizeSpan);
+        row.appendChild(del);
+        tree.appendChild(row);
+      });
+    }
+
+    window.addEventListener('message', (event) => {
+      const msg = event.data;
+      if (msg.command === 'refresh') {
+        switchMode(currentMode);
+      } else if (msg.command === 'topFilesResult' && currentMode === 'top') {
+        renderTopFiles(msg.items);
+      } else if (msg.command === 'cleanupResult' && currentMode === 'cleanup') {
+        renderCleanup(msg.items);
+      }
+    });
+
+    loadRoot();
+  </script>
+</body>
+</html>`;
+    }
+    getPlaceholderHtml(message) {
+        return `<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8">
+<style>
+  body {
+    font-family: var(--vscode-font-family);
+    background: var(--vscode-sideBar-background);
+    color: var(--vscode-descriptionForeground);
+    margin: 0;
+    padding: 20px;
+    font-size: 13px;
+  }
+  .empty { text-align: center; font-style: italic; }
+</style>
+</head>
+<body><div class="empty">${escapeHtml(message)}</div></body>
+</html>`;
+    }
+    getErrorHtml(error) {
+        return `<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8">
+<style>
+  body {
+    font-family: var(--vscode-font-family);
+    background: var(--vscode-sideBar-background);
+    color: var(--vscode-errorForeground, #f14c4c);
+    margin: 0;
+    padding: 20px;
+    font-size: 13px;
+  }
+</style>
+</head>
+<body>Erreur: ${escapeHtml(error)}</body>
+</html>`;
+    }
+}
+WorkspaceSizesWebviewProvider.TOP_FILES_SKIP_DIRS = new Set([
+    "node_modules", ".git", "vendor", ".cache", ".next", ".nuxt", "dist", "build",
+    ".gradle", ".m2", "__pycache__", ".venv", "venv", ".tox", "target", "Pods",
+    "DerivedData", ".turbo", ".parcel-cache", "coverage"
+]);
+WorkspaceSizesWebviewProvider.CLEANUP_PATTERNS = [
+    "node_modules", ".git", "vendor", ".cache", ".next", ".nuxt", "dist", "build",
+    ".gradle", ".m2", "__pycache__", ".venv", "venv", ".tox", "target", "Pods",
+    "DerivedData", ".turbo", ".parcel-cache", "coverage", ".svelte-kit", ".angular",
+    "tmp", "temp", ".tmp", "out", "bin", "obj"
+];
+WorkspaceSizesWebviewProvider.IMAGE_EXTS = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".ico", ".bmp", ".avif"];
+WorkspaceSizesWebviewProvider.VIDEO_EXTS = [".mp4", ".webm", ".mov", ".ogv", ".mkv"];
+WorkspaceSizesWebviewProvider.AUDIO_EXTS = [".mp3", ".wav", ".flac", ".ogg", ".m4a", ".aac", ".opus"];
+WorkspaceSizesWebviewProvider.CODE_EXTS = [".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".py", ".rb", ".go", ".rs", ".java", ".kt", ".c", ".cc", ".cpp", ".h", ".hpp", ".cs", ".swift", ".php", ".sh", ".bash", ".zsh", ".fish", ".ps1", ".lua", ".r", ".scala", ".clj", ".ex", ".exs", ".erl", ".hs", ".elm", ".dart", ".vue", ".svelte", ".sql", ".graphql", ".gql", ".proto", ".twig", ".pug", ".hbs", ".ejs"];
+WorkspaceSizesWebviewProvider.ARCHIVE_EXTS = [".zip", ".tar", ".gz", ".tgz", ".bz2", ".xz", ".7z", ".rar"];
+WorkspaceSizesWebviewProvider.PHPSERVER_PORTS = [8000, 8001, 8888, 8080, 3000, 5173, 4173];
+async function createPreviewTooltip(uri, bytes) {
+    const tooltip = new vscode.MarkdownString();
+    tooltip.supportHtml = true;
+    tooltip.isTrusted = true;
+    tooltip.appendMarkdown(`**Chemin**\n\`\`\`${uri.fsPath}\`\`\`\n\n`);
+    tooltip.appendMarkdown(`**Taille**: ${formatBytes(bytes)}\n\n`);
+    try {
+        const ext = path.extname(uri.fsPath).toLowerCase();
+        const isImage = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".ico", ".bmp"].includes(ext);
+        const isVideo = [".mp4", ".webm", ".mov", ".avi", ".mkv", ".flv"].includes(ext);
+        const isAudio = [".mp3", ".wav", ".flac", ".ogg", ".m4a", ".aac"].includes(ext);
+        const isPdf = ext === ".pdf";
+        const isArchive = [".zip", ".tar", ".gz", ".7z", ".rar"].includes(ext);
+        if (isImage) {
+            tooltip.appendMarkdown(`🖼️ **Image** (${ext})\n\n`);
+            tooltip.appendMarkdown(`*Aperçu disponible via clic droit → Preview*`);
+        }
+        else if (isVideo) {
+            tooltip.appendMarkdown(`🎬 **Vidéo** (${ext})\n\n`);
+        }
+        else if (isAudio) {
+            tooltip.appendMarkdown(`🎵 **Audio** (${ext})\n\n`);
+        }
+        else if (isPdf) {
+            tooltip.appendMarkdown(`📄 **PDF**\n\n`);
+        }
+        else if (isArchive) {
+            tooltip.appendMarkdown(`📦 **Archive** (${ext})\n\n`);
+        }
+        else if (bytes < 512 * 1024) {
+            const content = await fs.readFile(uri.fsPath, "utf-8");
+            const lines = content.split(/\r?\n/).slice(0, 8);
+            const preview = lines.join("\n").slice(0, 400);
+            tooltip.appendMarkdown(`**Aperçu**\n\`\`\`${ext.replace(".", "")}\n${preview}\n\`\`\``);
+        }
+        else {
+            tooltip.appendMarkdown(`📁 **Fichier** (${ext})\n\n`);
+            tooltip.appendMarkdown(`*Fichier trop volumineux pour l'aperçu*`);
+        }
+    }
+    catch (error) {
+        tooltip.appendMarkdown(`*Aperçu non disponible*`);
+    }
+    return tooltip;
+}
 function activate(context) {
     sizeDecorLog("[activate] START");
     try {
@@ -4717,6 +6423,7 @@ function activate(context) {
         provider.setWorkspace(workspaceRoot);
         provider.refresh();
         sizeExplorerProvider?.refresh();
+        workspaceSizesProvider?.refresh();
         if (watcher) {
             watcher.dispose();
             watcher = undefined;
@@ -4745,13 +6452,12 @@ function activate(context) {
     // Dedicated size tree: descriptions are readable and aligned after names.
     let sizeExplorerProvider;
     let nativeSizeDecorationProvider;
+    let workspaceSizesProvider;
     try {
         sizeExplorerProvider = new SizeExplorerProvider();
         nativeSizeDecorationProvider = new NativeSizeDecorationProvider();
-        context.subscriptions.push(vscode.window.createTreeView("workspaceSizesView", {
-            treeDataProvider: sizeExplorerProvider,
-            showCollapseAll: true
-        }));
+        workspaceSizesProvider = new WorkspaceSizesWebviewProvider();
+        context.subscriptions.push(vscode.window.registerWebviewViewProvider("workspaceSizesView", workspaceSizesProvider));
         context.subscriptions.push(vscode.window.registerFileDecorationProvider(nativeSizeDecorationProvider));
         sizeDecorLog(`[init] SizeExplorerProvider registered. workspaceRoot=${vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? "<none>"}`);
         sizeExplorerProvider.refresh();
@@ -4770,6 +6476,7 @@ function activate(context) {
         context.subscriptions.push(vscode.commands.registerCommand("pkvsconf.sizeExplorerRefresh", () => {
             sizeExplorerProvider?.refresh();
             nativeSizeDecorationProvider?.refresh();
+            workspaceSizesProvider?.refresh();
         }));
         const sizeWatcher = vscode.workspace.createFileSystemWatcher("**/*");
         let sizeDebounce;
@@ -4778,13 +6485,17 @@ function activate(context) {
             sizeDebounce = setTimeout(() => {
                 sizeExplorerProvider?.refreshPath(uri.fsPath);
                 nativeSizeDecorationProvider?.refresh();
+                workspaceSizesProvider?.refresh();
             }, 300);
         };
         sizeWatcher.onDidCreate(refreshSizesFor);
         sizeWatcher.onDidDelete(refreshSizesFor);
         sizeWatcher.onDidChange(refreshSizesFor);
         context.subscriptions.push(sizeWatcher);
-        context.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(() => sizeExplorerProvider?.refresh()));
+        context.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(() => {
+            sizeExplorerProvider?.refresh();
+            workspaceSizesProvider?.refresh();
+        }));
     }
     catch (e) {
         sizeDecorLog(`[size init] THREW: ${e.message}\n${e.stack}`);
