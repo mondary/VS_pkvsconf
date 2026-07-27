@@ -1649,7 +1649,7 @@ async function buildLaunchpadPanelHtml(
   const nonce = getNonce();
   const currentWorkspace = getWorkspaceRootFsPath();
   const layout = getLaunchpadLayoutSettings();
-  const cellSize = Math.max(layout.iconSize + 94, 136);
+  const cellSize = Math.max(layout.iconSize + 56, 104);
 
   const cardsHtml = cards
     .map((c, index) => {
@@ -1883,8 +1883,8 @@ async function buildLaunchpadPanelHtml(
           align-self: stretch;
           display: grid;
           grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
-          grid-auto-rows: var(--cell-size);
-          gap: clamp(14px, 2vw, 26px);
+          grid-auto-rows: min-content;
+          gap: clamp(6px, 1vw, 14px);
           overflow-y: auto;
           overflow-x: hidden;
           padding: 6px 4px 30px;
@@ -1898,14 +1898,15 @@ async function buildLaunchpadPanelHtml(
           background: var(--panel);
           color: var(--text);
           min-width: 0;
-          padding: 18px 14px 14px;
+          height: var(--cell-size);
+          padding: 12px 12px 10px;
           border-radius: 20px;
           cursor: pointer;
           display: grid;
           grid-template-rows: var(--icon-size) auto auto;
           justify-items: center;
           align-items: center;
-          gap: 10px;
+          gap: 6px;
           backdrop-filter: blur(14px);
           box-shadow: 0 14px 34px rgba(0,0,0,0.12);
           transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
@@ -1991,8 +1992,8 @@ async function buildLaunchpadPanelHtml(
           letter-spacing: 1px;
           color: var(--muted);
           padding: 0;
-          margin: 0;
-          line-height: 18px;
+          margin: 4px 0 2px;
+          line-height: 14px;
         }
         .favSeparator::after {
           content: '';
@@ -2299,7 +2300,7 @@ async function buildLaunchpadPanelHtml(
           box-shadow: 0 0 0 2px color-mix(in srgb, var(--vscode-focusBorder) 28%, transparent), 0 12px 40px rgba(0,0,0,0.14);
         }
         body.theme-classic .apps {
-          gap: clamp(10px, 1.8vw, 24px) clamp(8px, 1.6vw, 20px);
+          gap: clamp(4px, 0.8vw, 10px) clamp(6px, 1.2vw, 14px);
           padding: 8px 2px 26px;
         }
         body.theme-classic .app {
@@ -2667,7 +2668,7 @@ ${shortcutsHtml}
           theme = themeInput?.value === 'classic' ? 'classic' : 'sleek';
           focusColor = normalizeHexColor(focusColorInput?.value ?? focusColor, focusColor);
           restorePanels = ['none','left','right','both'].includes(restorePanelsInput?.value) ? restorePanelsInput.value : 'none';
-          const cellSize = Math.max(iconSize + 94, 136);
+          const cellSize = Math.max(iconSize + 56, 104);
           document.documentElement.style.setProperty('--cols', String(layoutColumns));
           document.documentElement.style.setProperty('--visible-rows', String(layoutRows));
           document.documentElement.style.setProperty('--icon-size', iconSize + 'px');
