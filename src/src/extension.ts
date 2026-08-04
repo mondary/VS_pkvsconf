@@ -3306,6 +3306,7 @@ class LaunchpadPanel {
           this.panel?.dispose();
           return;
         }
+        this.panel?.dispose();
         await openProjectInNewWindow(message.path);
       } else if (message.command === "reveal" && typeof message.path === "string") {
         await revealProjectInFinder({ name: path.basename(message.path), path: message.path });
@@ -3984,7 +3985,7 @@ function buildHtml(
       padding: 0;
       width: 100%;
       height: 100%;
-      background: transparent;
+      background: var(--vscode-sideBar-background);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
 
@@ -5850,11 +5851,16 @@ class WorkspaceSizesWebviewProvider implements vscode.WebviewViewProvider {
   private static readonly ARCHIVE_EXTS = [".zip", ".tar", ".gz", ".tgz", ".bz2", ".xz", ".7z", ".rar"];
   private static readonly PHPSERVER_PORTS = [8000, 8001, 8888, 8080, 3000, 5173, 4173];
 
-  private _phpServers = new Map<string, { proc: import("child_process").ChildProcess; port: number; refCount: number }>();
+  private _phpServers = new Map<string, { proc: import("child_process").ChildProcess; port: number; refCount: number; persistent?: boolean }>();
 
   private async openSmartPreview(filePath: string): Promise<void> {
     const ext = path.extname(filePath).toLowerCase();
     const name = path.basename(filePath);
+
+    if (ext === ".php") {
+      await this.openPhpInBrowser(filePath);
+      return;
+    }
 
     try {
       const stat = await fs.stat(filePath);
@@ -5921,8 +5927,41 @@ class WorkspaceSizesWebviewProvider implements vscode.WebviewViewProvider {
     });
   }
 
+  async openPhpInBrowser(filePath: string): Promise<void> {
+    const docRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? path.dirname(filePath);
+
+    let router = "";
+    for (const name of ["local-router.php", "router.php", "index.php"]) {
+      const candidate = path.join(docRoot, name);
+      try {
+        if ((await fs.stat(candidate)).isFile()) { router = name; break; }
+      } catch {
+        // try next
+      }
+    }
+
+    const server = await this.findOrStartPhpServer(docRoot, router);
+    if (!server) {
+      vscode.window.showErrorMessage(
+        "Impossible de démarrer PHP. Vérifiez que PHP est installé et présent dans le PATH."
+      );
+      return;
+    }
+    const serverKey = `${docRoot}::${router}`;
+    const serverEntry = this._phpServers.get(serverKey);
+    if (serverEntry) serverEntry.persistent = true;
+
+    const relativePath = path.relative(docRoot, filePath).split(path.sep).join("/");
+    const relativeDir = path.dirname(relativePath);
+    const url = relativeDir && relativeDir !== "."
+      ? `${server.baseUrl}/${encodeURI(relativeDir)}/`
+      : `${server.baseUrl}/`;
+    await vscode.env.openExternal(vscode.Uri.parse(url));
+  }
+
   private async cleanupPhpServers(): Promise<void> {
     for (const [key, server] of this._phpServers) {
+      if (server.persistent) continue;
       server.refCount -= 1;
       if (server.refCount <= 0) {
         try {
@@ -5935,8 +5974,9 @@ class WorkspaceSizesWebviewProvider implements vscode.WebviewViewProvider {
     }
   }
 
-  private async findOrStartPhpServer(docRoot: string): Promise<{ port: number; baseUrl: string } | undefined> {
-    const existing = this._phpServers.get(docRoot);
+  private async findOrStartPhpServer(docRoot: string, router = ""): Promise<{ port: number; baseUrl: string } | undefined> {
+    const serverKey = `${docRoot}::${router}`;
+    const existing = this._phpServers.get(serverKey);
     if (existing) {
       existing.refCount += 1;
       return { port: existing.port, baseUrl: `http://localhost:${existing.port}` };
@@ -5955,27 +5995,21 @@ class WorkspaceSizesWebviewProvider implements vscode.WebviewViewProvider {
       }
     }
 
+    const phpArgs = router
+      ? ["-S", `localhost:0PLACEHOLDER`, "-t", docRoot, router]
+      : ["-S", `localhost:0PLACEHOLDER`, "-t", docRoot];
+
     for (const port of WorkspaceSizesWebviewProvider.PHPSERVER_PORTS) {
       try {
         const inUse = await execAsync(`lsof -i :${port} -t`, { timeout: 800 }).then(o => o.stdout.trim());
-        if (inUse) {
-          try {
-            const resp = await execAsync(`curl -s -o /dev/null -w "%{http_code}" http://localhost:${port}/`, { timeout: 1500 });
-            if (resp.stdout.trim().match(/^[2-4]\d\d$/)) {
-              const server = { proc: {} as import("child_process").ChildProcess, port, refCount: 1 };
-              this._phpServers.set(docRoot, server);
-              return { port, baseUrl: `http://localhost:${port}` };
-            }
-          } catch {
-            continue;
-          }
-        }
+        if (inUse) continue;
       } catch {
         // port libre
       }
 
       try {
-        const proc = cp.spawn(phpBin, ["-S", `localhost:${port}`, "-t", docRoot], {
+        const args = phpArgs.map((a) => (a === "localhost:0PLACEHOLDER" ? `localhost:${port}` : a));
+        const proc = cp.spawn(phpBin, args, {
           stdio: "ignore",
           detached: false,
           cwd: docRoot
@@ -5983,7 +6017,7 @@ class WorkspaceSizesWebviewProvider implements vscode.WebviewViewProvider {
         await new Promise(resolve => setTimeout(resolve, 400));
         if (proc.exitCode !== null && proc.exitCode !== 0) continue;
 
-        this._phpServers.set(docRoot, { proc, port, refCount: 1 });
+        this._phpServers.set(serverKey, { proc, port, refCount: 1 });
         return { port, baseUrl: `http://localhost:${port}` };
       } catch {
         continue;
@@ -6106,29 +6140,26 @@ ${extraHead}
   }
 
   private async buildPhpPreview(filePath: string, panel: vscode.WebviewPanel): Promise<string> {
-    const wsRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    const docRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? path.dirname(filePath);
     const name = path.basename(filePath);
 
-    let docRoot = wsRoot ?? path.dirname(filePath);
-    const candidates = [
-      path.join(wsRoot ?? "", "public"),
-      wsRoot ?? "",
-      path.dirname(filePath)
-    ];
-    for (const c of candidates) {
+    let router = "";
+    for (const rn of ["local-router.php", "router.php", "index.php"]) {
       try {
-        const s = await fs.stat(c);
-        if (s.isDirectory()) { docRoot = c; break; }
+        if ((await fs.stat(path.join(docRoot, rn))).isFile()) { router = rn; break; }
       } catch { /* skip */ }
     }
 
-    const server = await this.findOrStartPhpServer(docRoot);
+    const server = await this.findOrStartPhpServer(docRoot, router);
     if (!server) {
       return this.buildCodePreview(filePath, panel, "PHP server introuvable — affichage du code source.");
     }
 
-    const relPath = path.relative(docRoot, filePath);
-    const previewUrl = `${server.baseUrl}/${relPath.split(path.sep).join("/")}`;
+    const relPath = path.relative(docRoot, filePath).split(path.sep).join("/");
+    const relDir = path.dirname(relPath);
+    const previewUrl = relDir && relDir !== "."
+      ? `${server.baseUrl}/${relDir}/`
+      : `${server.baseUrl}/`;
 
     return this.previewShell(name, `
       <iframe src="${previewUrl}" style="width:100%;height:100%;border:0;background:#fff;" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"></iframe>
@@ -7241,6 +7272,15 @@ export function activate(context: vscode.ExtensionContext) {
   previewItem.command = "pkvsconf.previewActivePage";
   previewItem.show();
 
+  const serverItem = vscode.window.createStatusBarItem(
+    vscode.StatusBarAlignment.Left,
+    99
+  );
+  serverItem.text = "$(play) Server";
+  serverItem.tooltip = "Lancer le serveur PHP et ouvrir le navigateur";
+  serverItem.command = "pkvsconf.launchServer";
+  serverItem.show();
+
   const titlebarColorItem = vscode.window.createStatusBarItem(
     vscode.StatusBarAlignment.Left,
     97
@@ -8220,6 +8260,15 @@ export function activate(context: vscode.ExtensionContext) {
       const fileName = path.basename(uri.fsPath);
       const fileExt = path.extname(uri.fsPath).toLowerCase();
       const isPhpFile = fileExt === '.php';
+
+      if (isPhpFile && uri.scheme === "file") {
+        if (workspaceSizesProvider) {
+          await workspaceSizesProvider.openPhpInBrowser(uri.fsPath);
+        } else {
+          vscode.window.showErrorMessage("Le serveur PHP n'est pas disponible.");
+        }
+        return;
+      }
       
       const panel = vscode.window.createWebviewPanel(
         'pagePreview',
@@ -8295,6 +8344,35 @@ export function activate(context: vscode.ExtensionContext) {
           `Erreur lors de la lecture du fichier: ${error}`
         );
       }
+    }
+  );
+
+  const launchServerCmd = vscode.commands.registerCommand(
+    "pkvsconf.launchServer",
+    async () => {
+      const activeUri = vscode.window.activeTextEditor?.document.uri;
+      if (activeUri?.scheme === "file" && path.extname(activeUri.fsPath).toLowerCase() === ".php") {
+        await workspaceSizesProvider?.openPhpInBrowser(activeUri.fsPath);
+        return;
+      }
+
+      const files = await vscode.workspace.findFiles(
+        "**/*.php",
+        "**/{node_modules,vendor,.git}/**",
+        100
+      );
+      if (!files.length) {
+        vscode.window.showWarningMessage("Aucun fichier PHP trouvé dans ce workspace.");
+        return;
+      }
+
+      const selected = files.length === 1
+        ? files[0]
+        : (await vscode.window.showQuickPick(
+          files.map((file) => ({ label: vscode.workspace.asRelativePath(file), file })),
+          { placeHolder: "Choisir le fichier PHP à lancer" }
+        ))?.file;
+      if (selected) await workspaceSizesProvider?.openPhpInBrowser(selected.fsPath);
     }
   );
 
@@ -8747,6 +8825,7 @@ export function activate(context: vscode.ExtensionContext) {
     refreshCmd,
     openRootFolderCmd,
     previewActivePageCmd,
+    launchServerCmd,
     openInDefaultBrowserCmd,
     addToGitignoreCmd,
     terminalSplitRightCmd,

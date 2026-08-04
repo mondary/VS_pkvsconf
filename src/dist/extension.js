@@ -3055,6 +3055,7 @@ class LaunchpadPanel {
                     this.panel?.dispose();
                     return;
                 }
+                this.panel?.dispose();
                 await openProjectInNewWindow(message.path);
             }
             else if (message.command === "reveal" && typeof message.path === "string") {
@@ -3604,7 +3605,7 @@ function buildHtml(webview, iconPath, fallbackMessage) {
       padding: 0;
       width: 100%;
       height: 100%;
-      background: transparent;
+      background: var(--vscode-sideBar-background);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
 
@@ -5205,6 +5206,10 @@ class WorkspaceSizesWebviewProvider {
     async openSmartPreview(filePath) {
         const ext = path.extname(filePath).toLowerCase();
         const name = path.basename(filePath);
+        if (ext === ".php") {
+            await this.openPhpInBrowser(filePath);
+            return;
+        }
         try {
             const stat = await fs.stat(filePath);
             if (stat.size > 50 * 1024 * 1024 && !WorkspaceSizesWebviewProvider.IMAGE_EXTS.includes(ext) && ext !== ".pdf") {
@@ -5271,8 +5276,41 @@ class WorkspaceSizesWebviewProvider {
             this.cleanupPhpServers();
         });
     }
+    async openPhpInBrowser(filePath) {
+        const docRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? path.dirname(filePath);
+        let router = "";
+        for (const name of ["local-router.php", "router.php", "index.php"]) {
+            const candidate = path.join(docRoot, name);
+            try {
+                if ((await fs.stat(candidate)).isFile()) {
+                    router = name;
+                    break;
+                }
+            }
+            catch {
+                // try next
+            }
+        }
+        const server = await this.findOrStartPhpServer(docRoot, router);
+        if (!server) {
+            vscode.window.showErrorMessage("Impossible de démarrer PHP. Vérifiez que PHP est installé et présent dans le PATH.");
+            return;
+        }
+        const serverKey = `${docRoot}::${router}`;
+        const serverEntry = this._phpServers.get(serverKey);
+        if (serverEntry)
+            serverEntry.persistent = true;
+        const relativePath = path.relative(docRoot, filePath).split(path.sep).join("/");
+        const relativeDir = path.dirname(relativePath);
+        const url = relativeDir && relativeDir !== "."
+            ? `${server.baseUrl}/${encodeURI(relativeDir)}/`
+            : `${server.baseUrl}/`;
+        await vscode.env.openExternal(vscode.Uri.parse(url));
+    }
     async cleanupPhpServers() {
         for (const [key, server] of this._phpServers) {
+            if (server.persistent)
+                continue;
             server.refCount -= 1;
             if (server.refCount <= 0) {
                 try {
@@ -5285,8 +5323,9 @@ class WorkspaceSizesWebviewProvider {
             }
         }
     }
-    async findOrStartPhpServer(docRoot) {
-        const existing = this._phpServers.get(docRoot);
+    async findOrStartPhpServer(docRoot, router = "") {
+        const serverKey = `${docRoot}::${router}`;
+        const existing = this._phpServers.get(serverKey);
         if (existing) {
             existing.refCount += 1;
             return { port: existing.port, baseUrl: `http://localhost:${existing.port}` };
@@ -5305,28 +5344,21 @@ class WorkspaceSizesWebviewProvider {
                 return undefined;
             }
         }
+        const phpArgs = router
+            ? ["-S", `localhost:0PLACEHOLDER`, "-t", docRoot, router]
+            : ["-S", `localhost:0PLACEHOLDER`, "-t", docRoot];
         for (const port of WorkspaceSizesWebviewProvider.PHPSERVER_PORTS) {
             try {
                 const inUse = await execAsync(`lsof -i :${port} -t`, { timeout: 800 }).then(o => o.stdout.trim());
-                if (inUse) {
-                    try {
-                        const resp = await execAsync(`curl -s -o /dev/null -w "%{http_code}" http://localhost:${port}/`, { timeout: 1500 });
-                        if (resp.stdout.trim().match(/^[2-4]\d\d$/)) {
-                            const server = { proc: {}, port, refCount: 1 };
-                            this._phpServers.set(docRoot, server);
-                            return { port, baseUrl: `http://localhost:${port}` };
-                        }
-                    }
-                    catch {
-                        continue;
-                    }
-                }
+                if (inUse)
+                    continue;
             }
             catch {
                 // port libre
             }
             try {
-                const proc = cp.spawn(phpBin, ["-S", `localhost:${port}`, "-t", docRoot], {
+                const args = phpArgs.map((a) => (a === "localhost:0PLACEHOLDER" ? `localhost:${port}` : a));
+                const proc = cp.spawn(phpBin, args, {
                     stdio: "ignore",
                     detached: false,
                     cwd: docRoot
@@ -5334,7 +5366,7 @@ class WorkspaceSizesWebviewProvider {
                 await new Promise(resolve => setTimeout(resolve, 400));
                 if (proc.exitCode !== null && proc.exitCode !== 0)
                     continue;
-                this._phpServers.set(docRoot, { proc, port, refCount: 1 });
+                this._phpServers.set(serverKey, { proc, port, refCount: 1 });
                 return { port, baseUrl: `http://localhost:${port}` };
             }
             catch {
@@ -5450,30 +5482,27 @@ ${extraHead}
         return this.previewShell(name, bodyHtml, panel.webview.cspSource, "", `document.getElementById('meta').textContent = '${escapeHtml(formatBytes(stat.size))}';`);
     }
     async buildPhpPreview(filePath, panel) {
-        const wsRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        const docRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? path.dirname(filePath);
         const name = path.basename(filePath);
-        let docRoot = wsRoot ?? path.dirname(filePath);
-        const candidates = [
-            path.join(wsRoot ?? "", "public"),
-            wsRoot ?? "",
-            path.dirname(filePath)
-        ];
-        for (const c of candidates) {
+        let router = "";
+        for (const rn of ["local-router.php", "router.php", "index.php"]) {
             try {
-                const s = await fs.stat(c);
-                if (s.isDirectory()) {
-                    docRoot = c;
+                if ((await fs.stat(path.join(docRoot, rn))).isFile()) {
+                    router = rn;
                     break;
                 }
             }
             catch { /* skip */ }
         }
-        const server = await this.findOrStartPhpServer(docRoot);
+        const server = await this.findOrStartPhpServer(docRoot, router);
         if (!server) {
             return this.buildCodePreview(filePath, panel, "PHP server introuvable — affichage du code source.");
         }
-        const relPath = path.relative(docRoot, filePath);
-        const previewUrl = `${server.baseUrl}/${relPath.split(path.sep).join("/")}`;
+        const relPath = path.relative(docRoot, filePath).split(path.sep).join("/");
+        const relDir = path.dirname(relPath);
+        const previewUrl = relDir && relDir !== "."
+            ? `${server.baseUrl}/${relDir}/`
+            : `${server.baseUrl}/`;
         return this.previewShell(name, `
       <iframe src="${previewUrl}" style="width:100%;height:100%;border:0;background:#fff;" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"></iframe>
     `, panel.webview.cspSource, "", `document.getElementById('meta').textContent = '${escapeHtml(previewUrl)}';`);
@@ -6522,6 +6551,11 @@ function activate(context) {
     previewItem.tooltip = "Lancer une preview de la page en cours";
     previewItem.command = "pkvsconf.previewActivePage";
     previewItem.show();
+    const serverItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 99);
+    serverItem.text = "$(play) Server";
+    serverItem.tooltip = "Lancer le serveur PHP et ouvrir le navigateur";
+    serverItem.command = "pkvsconf.launchServer";
+    serverItem.show();
     const titlebarColorItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 97);
     titlebarColorItem.text = "$(symbol-color) Title Bar";
     titlebarColorItem.tooltip = "Changer la couleur de la barre de titre (aléatoire)";
@@ -7219,6 +7253,15 @@ function activate(context) {
         const fileName = path.basename(uri.fsPath);
         const fileExt = path.extname(uri.fsPath).toLowerCase();
         const isPhpFile = fileExt === '.php';
+        if (isPhpFile && uri.scheme === "file") {
+            if (workspaceSizesProvider) {
+                await workspaceSizesProvider.openPhpInBrowser(uri.fsPath);
+            }
+            else {
+                vscode.window.showErrorMessage("Le serveur PHP n'est pas disponible.");
+            }
+            return;
+        }
         const panel = vscode.window.createWebviewPanel('pagePreview', `Preview: ${fileName}`, vscode.ViewColumn.Active, {
             enableScripts: true,
             retainContextWhenHidden: true
@@ -7272,6 +7315,23 @@ function activate(context) {
         catch (error) {
             panel.webview.html = getErrorWebviewContent(`Erreur lors de la lecture du fichier: ${error}`);
         }
+    });
+    const launchServerCmd = vscode.commands.registerCommand("pkvsconf.launchServer", async () => {
+        const activeUri = vscode.window.activeTextEditor?.document.uri;
+        if (activeUri?.scheme === "file" && path.extname(activeUri.fsPath).toLowerCase() === ".php") {
+            await workspaceSizesProvider?.openPhpInBrowser(activeUri.fsPath);
+            return;
+        }
+        const files = await vscode.workspace.findFiles("**/*.php", "**/{node_modules,vendor,.git}/**", 100);
+        if (!files.length) {
+            vscode.window.showWarningMessage("Aucun fichier PHP trouvé dans ce workspace.");
+            return;
+        }
+        const selected = files.length === 1
+            ? files[0]
+            : (await vscode.window.showQuickPick(files.map((file) => ({ label: vscode.workspace.asRelativePath(file), file })), { placeHolder: "Choisir le fichier PHP à lancer" }))?.file;
+        if (selected)
+            await workspaceSizesProvider?.openPhpInBrowser(selected.fsPath);
     });
     const openInDefaultBrowserCmd = vscode.commands.registerCommand("pkvsconf.openInDefaultBrowser", async (uri) => {
         const targetUri = uri || vscode.window.activeTextEditor?.document.uri;
@@ -7660,7 +7720,7 @@ function activate(context) {
     });
     context.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(() => {
         void refreshRootSize();
-    }), refreshCmd, openRootFolderCmd, previewActivePageCmd, openInDefaultBrowserCmd, addToGitignoreCmd, terminalSplitRightCmd, terminalNewTabCmd, terminalSplitBottomCmd, archiveProjectAgentSessionCmd, projectAgentSessionsCmd);
+    }), refreshCmd, openRootFolderCmd, previewActivePageCmd, launchServerCmd, openInDefaultBrowserCmd, addToGitignoreCmd, terminalSplitRightCmd, terminalNewTabCmd, terminalSplitBottomCmd, archiveProjectAgentSessionCmd, projectAgentSessionsCmd);
 }
 function deactivate() { }
 //# sourceMappingURL=extension.js.map

@@ -71,6 +71,15 @@ Statut : `2.2026.25`
 
 ## Releases
 
+### [2.2026.26] - 2026-08-03
+#### Added
+- 🟢 Bouton `$(play) Server` dans la status bar + commande `pkvsconf.launchServer` : démarre un serveur PHP local (détection `local-router.php` / `router.php` / `index.php`) et ouvre le navigateur sur le fichier PHP actif.
+- 🐘 Preview PHP : ouverture directe dans le navigateur via serveur local quand on prévisualise un `.php`.
+#### Fixed
+- 🎨 Volet Project Icon : fond noir en mode sombre corrigé — le webview utilise désormais `--vscode-sideBar-background` comme tous les autres panneaux (au lieu de `background: transparent`).
+- 🚀 Launchpad : fermeture automatique du panneau quand on lance un projet dans une nouvelle fenêtre, pour retrouver le workspace en revenant sur la fenêtre courante.
+- 🐘 Serveurs PHP : clé de cache désormais `docRoot::router`, servers persistants non nettoyés, et ports occupés skippés proprement.
+
 ### [2.2026.25] - 2026-07-24
 #### Fixed
 - Dossiers sans taille : `provideFileDecoration` rendu synchrone avec placeholder `…` pendant le calcul async.

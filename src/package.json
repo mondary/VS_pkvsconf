@@ -31,6 +31,7 @@
     "onCommand:pkvsconf.removeTagFromExtension",
     "onCommand:pkvsconf.regenerateWorkspaceTitlebarColor",
     "onCommand:pkvsconf.previewActivePage",
+    "onCommand:pkvsconf.launchServer",
     "onCommand:pkvsconf.showExposedSecrets",
     "onCommand:pkvsconf.rescanSecrets",
     "onCommand:pkvsconf.commitWithSecretCheck",
@@ -290,6 +291,11 @@
         "command": "pkvsconf.previewActivePage",
         "title": "Preview de la page en cours",
         "icon": "$(open-preview)"
+      },
+      {
+        "command": "pkvsconf.launchServer",
+        "title": "Lancer le serveur PHP",
+        "icon": "$(play)"
       },
       {
         "command": "pkvsconf.showExposedSecrets",
