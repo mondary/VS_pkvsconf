@@ -6,7 +6,7 @@ Toutes les modifications notables de **VS_pkvsconf** sont documentées ici.
 
 ## TODO — Roadmap
 
-Statut : `2.2026.25`
+Statut : `2.2026.27`
 
 ### Feature 1 — Add to .gitignore ✅
 - [x] Commande « ⛔ Ajouter au .gitignore » au clic droit explorer
@@ -70,6 +70,10 @@ Statut : `2.2026.25`
 ---
 
 ## Releases
+
+### [2.2026.27] - 2026-08-27
+#### Fixed
+- 🔵 Badges de taille dans l'Explorateur natif : fini le clignotement — calcul des dossiers désormais 100 % async (plus de `du -sk` synchrone bloquant), cache TTL 60 s, et les événements fichier ne vidangent plus les badges (refresh manuel inchangé).
 
 ### [2.2026.26] - 2026-08-03
 #### Added

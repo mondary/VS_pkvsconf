@@ -4642,20 +4642,22 @@ class NativeSizeDecorationProvider {
     constructor() {
         this._onDidChangeFileDecorations = new vscode.EventEmitter();
         this.onDidChangeFileDecorations = this._onDidChangeFileDecorations.event;
-        this.dirSizeCache = new Map();
+        this.cache = new Map();
+        this.pending = new Map();
         this.enabled = true;
     }
     setEnabled(value) {
         if (this.enabled === value)
             return;
         this.enabled = value;
+        this.cache.clear();
         this._onDidChangeFileDecorations.fire(undefined);
     }
     isEnabled() {
         return this.enabled;
     }
     refresh() {
-        this.dirSizeCache.clear();
+        this.cache.clear();
         this._onDidChangeFileDecorations.fire(undefined);
     }
     provideFileDecoration(uri) {
@@ -4674,28 +4676,30 @@ class NativeSizeDecorationProvider {
             return makeSizeBadge(stat.size);
         }
         const fsPath = uri.fsPath;
-        const cached = this.dirSizeCache.get(fsPath);
-        if (cached !== undefined)
-            return makeSizeBadge(cached);
-        const bytes = getDirSizeSync(fsPath);
-        this.dirSizeCache.set(fsPath, bytes);
-        return makeSizeBadge(bytes);
+        const hit = this.cache.get(fsPath);
+        if (hit && Date.now() - hit.at < NativeSizeDecorationProvider.TTL_MS) {
+            return makeSizeBadge(hit.bytes);
+        }
+        // Thenable : VS Code attend la résolution, pas de blocage ni de badge fantôme.
+        return this.computeSize(fsPath).then(makeSizeBadge);
+    }
+    computeSize(fsPath) {
+        const inFlight = this.pending.get(fsPath);
+        if (inFlight)
+            return inFlight;
+        const calculation = getDirectorySizeBytes(fsPath)
+            .then(({ total }) => {
+            this.cache.set(fsPath, { bytes: total, at: Date.now() });
+            return total;
+        })
+            .finally(() => this.pending.delete(fsPath));
+        this.pending.set(fsPath, calculation);
+        return calculation;
     }
 }
-function getDirSizeSync(dirPath) {
-    try {
-        const out = cp.execSync(`du -sk "${dirPath}" 2>/dev/null`, {
-            encoding: "utf8",
-            timeout: 5000,
-            stdio: ["pipe", "pipe", "ignore"]
-        });
-        const kb = parseInt(out.trim().split(/\s+/)[0], 10);
-        return isNaN(kb) ? 0 : kb * 1024;
-    }
-    catch {
-        return 0;
-    }
-}
+// ponytail: TTL 60s — les tailles de dossiers changent rarement à la seconde ;
+// forcer le recalcul à chaque événement FS faisait clignoter les badges.
+NativeSizeDecorationProvider.TTL_MS = 60000;
 function makeSizeBadge(bytes) {
     return {
         badge: formatBytesBadge(bytes),
@@ -6513,7 +6517,8 @@ function activate(context) {
             clearTimeout(sizeDebounce);
             sizeDebounce = setTimeout(() => {
                 sizeExplorerProvider?.refreshPath(uri.fsPath);
-                nativeSizeDecorationProvider?.refresh();
+                // Native Explorer : pas de refresh ici — le clear+fire faisait clignoter
+                // tous les badges à chaque sauvegarde. Le TTL (60s) + refresh manuel suffisent.
                 workspaceSizesProvider?.refresh();
             }, 300);
         };

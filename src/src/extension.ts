@@ -5271,12 +5271,17 @@ class NativeSizeDecorationProvider implements vscode.FileDecorationProvider {
     vscode.Uri | vscode.Uri[] | undefined
   >();
   readonly onDidChangeFileDecorations = this._onDidChangeFileDecorations.event;
-  private readonly dirSizeCache = new Map<string, number>();
+  // ponytail: TTL 60s — les tailles de dossiers changent rarement à la seconde ;
+  // forcer le recalcul à chaque événement FS faisait clignoter les badges.
+  private static readonly TTL_MS = 60_000;
+  private readonly cache = new Map<string, { bytes: number; at: number }>();
+  private readonly pending = new Map<string, Promise<number>>();
   private enabled = true;
 
   setEnabled(value: boolean): void {
     if (this.enabled === value) return;
     this.enabled = value;
+    this.cache.clear();
     this._onDidChangeFileDecorations.fire(undefined);
   }
 
@@ -5285,11 +5290,11 @@ class NativeSizeDecorationProvider implements vscode.FileDecorationProvider {
   }
 
   refresh(): void {
-    this.dirSizeCache.clear();
+    this.cache.clear();
     this._onDidChangeFileDecorations.fire(undefined);
   }
 
-  provideFileDecoration(uri: vscode.Uri): vscode.FileDecoration | undefined {
+  provideFileDecoration(uri: vscode.Uri): vscode.FileDecoration | Promise<vscode.FileDecoration> | undefined {
     if (!this.enabled || uri.scheme !== "file") return undefined;
     if (!vscode.workspace.getWorkspaceFolder(uri)) return undefined;
 
@@ -5305,26 +5310,27 @@ class NativeSizeDecorationProvider implements vscode.FileDecorationProvider {
     }
 
     const fsPath = uri.fsPath;
-    const cached = this.dirSizeCache.get(fsPath);
-    if (cached !== undefined) return makeSizeBadge(cached);
+    const hit = this.cache.get(fsPath);
+    if (hit && Date.now() - hit.at < NativeSizeDecorationProvider.TTL_MS) {
+      return makeSizeBadge(hit.bytes);
+    }
 
-    const bytes = getDirSizeSync(fsPath);
-    this.dirSizeCache.set(fsPath, bytes);
-    return makeSizeBadge(bytes);
+    // Thenable : VS Code attend la résolution, pas de blocage ni de badge fantôme.
+    return this.computeSize(fsPath).then(makeSizeBadge);
   }
-}
 
-function getDirSizeSync(dirPath: string): number {
-  try {
-    const out = cp.execSync(`du -sk "${dirPath}" 2>/dev/null`, {
-      encoding: "utf8",
-      timeout: 5000,
-      stdio: ["pipe", "pipe", "ignore"]
-    });
-    const kb = parseInt(out.trim().split(/\s+/)[0], 10);
-    return isNaN(kb) ? 0 : kb * 1024;
-  } catch {
-    return 0;
+  private computeSize(fsPath: string): Promise<number> {
+    const inFlight = this.pending.get(fsPath);
+    if (inFlight) return inFlight;
+
+    const calculation = getDirectorySizeBytes(fsPath)
+      .then(({ total }) => {
+        this.cache.set(fsPath, { bytes: total, at: Date.now() });
+        return total;
+      })
+      .finally(() => this.pending.delete(fsPath));
+    this.pending.set(fsPath, calculation);
+    return calculation;
   }
 }
 
@@ -7215,7 +7221,8 @@ export function activate(context: vscode.ExtensionContext) {
       sizeDebounce = setTimeout(
         () => {
           sizeExplorerProvider?.refreshPath(uri.fsPath);
-          nativeSizeDecorationProvider?.refresh();
+          // Native Explorer : pas de refresh ici — le clear+fire faisait clignoter
+          // tous les badges à chaque sauvegarde. Le TTL (60s) + refresh manuel suffisent.
           workspaceSizesProvider?.refresh();
         },
         300
