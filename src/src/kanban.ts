@@ -1,5 +1,6 @@
 import * as path from "path";
 import * as vscode from "vscode";
+import { guardStatusBarItem } from "./featureToggles";
 
 const KANBAN_TERMINAL_NAME = "PK Kanban";
 
@@ -61,6 +62,7 @@ export function registerKanban(context: vscode.ExtensionContext): void {
     vscode.StatusBarAlignment.Left,
     92
   );
+  guardStatusBarItem(panelBtn, "kanban");
   panelBtn.name = "PK Kanban (terminal)";
   panelBtn.text = "$(terminal) Kanban";
   panelBtn.tooltip = "Ouvrir le Kanban dans le volet terminal du bas";
@@ -71,6 +73,7 @@ export function registerKanban(context: vscode.ExtensionContext): void {
     vscode.StatusBarAlignment.Left,
     91
   );
+  guardStatusBarItem(editorBtn, "kanban");
   editorBtn.name = "PK Kanban (éditeur)";
   editorBtn.text = "$(go-to-editor) Kanban";
   editorBtn.tooltip = "Ouvrir le Kanban dans un onglet de l'éditeur";

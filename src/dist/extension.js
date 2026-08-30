@@ -44,6 +44,8 @@ const util = __importStar(require("util"));
 const net = __importStar(require("net"));
 const os = __importStar(require("os"));
 const kanban_1 = require("./kanban");
+const sessionHistory_1 = require("./sessionHistory");
+const featureToggles_1 = require("./featureToggles");
 const execAsync = util.promisify(cp.exec);
 const SIZE_UNITS = ["KB", "MB", "GB", "TB"];
 const ICON_PREFIX = "icon.";
@@ -1002,6 +1004,58 @@ function getWorkspaceRootFsPath() {
         return undefined;
     }
     return ws.uri.fsPath;
+}
+function freshnessDot(ts) {
+    const days = (Date.now() - ts) / 86400000;
+    if (days < 1)
+        return "🟢";
+    if (days < 7)
+        return "🟡";
+    if (days < 30)
+        return "🟠";
+    return "🔴";
+}
+function isLiveSession(ts) {
+    return Date.now() - ts < 2 * 60000;
+}
+async function readLiveOpenCodeSessions() {
+    const live = new Set();
+    const dir = path.join(os.homedir(), ".local", "share", "opencode", "current-sessions");
+    let files;
+    try {
+        files = await fs.readdir(dir);
+    }
+    catch {
+        return live;
+    }
+    for (const file of files) {
+        if (!file.endsWith(".json"))
+            continue;
+        try {
+            const parsed = JSON.parse(await fs.readFile(path.join(dir, file), "utf8"));
+            if (parsed.id && parsed.time && Date.now() - parsed.time < 90000) {
+                live.add(parsed.id);
+            }
+        }
+        catch {
+            /* fichier corrompu, on ignore */
+        }
+    }
+    return live;
+}
+function formatRelativeFr(ts) {
+    const min = Math.round((Date.now() - ts) / 60000);
+    if (min < 1)
+        return "à l'instant";
+    if (min < 60)
+        return `il y a ${min} min`;
+    const h = Math.round(min / 60);
+    if (h < 24)
+        return `il y a ${h} h`;
+    const j = Math.round(h / 24);
+    if (j < 30)
+        return `il y a ${j} j`;
+    return `il y a ${Math.round(j / 30)} mois`;
 }
 async function ensureDir(dirPath) {
     try {
@@ -4502,6 +4556,8 @@ class GitignoreDecorationProvider {
         this._onDidChangeFileDecorations.fire(undefined);
     }
     provideFileDecoration(uri) {
+        if (!(0, featureToggles_1.isFeatureEnabled)("gitignoreDecorations"))
+            return undefined;
         if (this.ignoredPaths.has(uri.fsPath)) {
             return {
                 badge: "⛔",
@@ -4661,6 +4717,8 @@ class NativeSizeDecorationProvider {
         this._onDidChangeFileDecorations.fire(undefined);
     }
     provideFileDecoration(uri) {
+        if (!(0, featureToggles_1.isFeatureEnabled)("explorerSizes"))
+            return undefined;
         if (!this.enabled || uri.scheme !== "file")
             return undefined;
         if (!vscode.workspace.getWorkspaceFolder(uri))
@@ -6370,6 +6428,8 @@ async function createPreviewTooltip(uri, bytes) {
 }
 function activate(context) {
     sizeDecorLog("[activate] START");
+    void (0, featureToggles_1.initFeatureToggles)(context);
+    context.subscriptions.push((0, featureToggles_1.registerFeatureTogglesCommand)(context));
     try {
         (0, kanban_1.registerKanban)(context);
         sizeDecorLog("[activate] after registerKanban");
@@ -6384,6 +6444,7 @@ function activate(context) {
         const decorationProvider = new GitignoreDecorationProvider(workspaceRoot);
         gitignoreProvider = decorationProvider;
         context.subscriptions.push(vscode.window.registerFileDecorationProvider(decorationProvider));
+        context.subscriptions.push((0, featureToggles_1.onFeatureTogglesChanged)(() => void decorationProvider.refresh()));
         void decorationProvider.refresh();
         const gitignoreWatcher = vscode.workspace.createFileSystemWatcher("**/.gitignore");
         gitignoreWatcher.onDidChange(() => void decorationProvider.refresh());
@@ -6414,6 +6475,7 @@ function activate(context) {
     const notesProvider = new ProjectNotesViewProvider();
     const agentHistoryProvider = new AgentHistoryProvider(context);
     const agentSessionsItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 92);
+    (0, featureToggles_1.guardStatusBarItem)(agentSessionsItem, "sessions");
     agentSessionsItem.text = "$(history) Sessions";
     agentSessionsItem.tooltip = "Voir les sessions agents archivées pour ce projet";
     agentSessionsItem.command = "pkvsconf.projectAgentSessions";
@@ -6492,6 +6554,7 @@ function activate(context) {
         workspaceSizesProvider = new WorkspaceSizesWebviewProvider();
         context.subscriptions.push(vscode.window.registerWebviewViewProvider("workspaceSizesView", workspaceSizesProvider));
         context.subscriptions.push(vscode.window.registerFileDecorationProvider(nativeSizeDecorationProvider));
+        context.subscriptions.push((0, featureToggles_1.onFeatureTogglesChanged)(() => nativeSizeDecorationProvider?.refresh()));
         sizeDecorLog(`[init] SizeExplorerProvider registered. workspaceRoot=${vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? "<none>"}`);
         sizeExplorerProvider.refresh();
         const readShowSizesConfig = () => {
@@ -6546,44 +6609,52 @@ function activate(context) {
         void updateWorkspace();
     }));
     const rootSizeItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
+    (0, featureToggles_1.guardStatusBarItem)(rootSizeItem, "rootSize");
     rootSizeItem.text = "Root size: --";
     rootSizeItem.tooltip = "Click to open the root folder in Finder";
     rootSizeItem.command = "revealInFinderButton.openRootFolderInFinder";
     rootSizeItem.backgroundColor = new vscode.ThemeColor("statusBarItem.warningBackground");
     rootSizeItem.show();
     const previewItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 98);
+    (0, featureToggles_1.guardStatusBarItem)(previewItem, "previewPage");
     previewItem.text = "$(open-preview) Preview";
     previewItem.tooltip = "Lancer une preview de la page en cours";
     previewItem.command = "pkvsconf.previewActivePage";
     previewItem.show();
     const serverItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 99);
+    (0, featureToggles_1.guardStatusBarItem)(serverItem, "previewPage");
     serverItem.text = "$(play) Server";
     serverItem.tooltip = "Lancer le serveur PHP et ouvrir le navigateur";
     serverItem.command = "pkvsconf.launchServer";
     serverItem.show();
     const titlebarColorItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 97);
+    (0, featureToggles_1.guardStatusBarItem)(titlebarColorItem, "titlebarColor");
     titlebarColorItem.text = "$(symbol-color) Title Bar";
     titlebarColorItem.tooltip = "Changer la couleur de la barre de titre (aléatoire)";
     titlebarColorItem.command = "pkvsconf.regenerateWorkspaceTitlebarColor";
     titlebarColorItem.show();
     // Secrets Detection Status Bar Item
     const secretsItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 96);
+    (0, featureToggles_1.guardStatusBarItem)(secretsItem, "secrets");
     secretsItem.text = "$(shield) Secrets: --";
     secretsItem.tooltip = "Détection des secrets exposés";
     secretsItem.command = "pkvsconf.showExposedSecrets";
     secretsItem.show();
     // Agent Skills Status Bar Item
     const skillsSymlinkItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 95);
+    (0, featureToggles_1.guardStatusBarItem)(skillsSymlinkItem, "skillsSymlink");
     skillsSymlinkItem.text = "$(link) Agent Skills";
     skillsSymlinkItem.tooltip = "Créer un lien symbolique .agent vers le dossier -agent";
     skillsSymlinkItem.command = "pkvsconf.createSkillsSymlink";
     skillsSymlinkItem.show();
     const launchpadListItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 94);
+    (0, featureToggles_1.guardStatusBarItem)(launchpadListItem, "launchpad");
     launchpadListItem.text = "$(list-unordered) Projets";
     launchpadListItem.tooltip = "Ouvrir l'ancienne liste du Launchpad";
     launchpadListItem.command = "pkvsconf.launchpadOpenList";
     launchpadListItem.show();
     const launchpadItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 93);
+    (0, featureToggles_1.guardStatusBarItem)(launchpadItem, "launchpad");
     launchpadItem.text = "$(rocket) Launchpad";
     launchpadItem.tooltip = "Ouvrir le Launchpad projets en plein écran";
     launchpadItem.command = "pkvsconf.launchpadOpen";
@@ -7078,7 +7149,56 @@ function activate(context) {
             vscode.window.showWarningMessage("Ouvrez un projet pour accéder à ses sessions agents.");
             return;
         }
+        const allRoots = [
+            ...new Set((vscode.workspace.workspaceFolders ?? [])
+                .filter((folder) => folder.uri.scheme === "file")
+                .map((folder) => folder.uri.fsPath))
+        ];
+        const history = await (0, sessionHistory_1.collectProjectSessionHistory)(allRoots.length ? allRoots : [workspaceRoot]);
         const sessions = await getProjectAgentSessions(workspaceRoot);
+        const currentSession = await readLiveOpenCodeSessions();
+        const openCodeHistory = history.filter((h) => h.source === "opencode");
+        const codexHistory = history.filter((h) => h.source === "codex");
+        const historyItems = [];
+        if (!history.length) {
+            const diag = Object.entries(sessionHistory_1.lastSessionCollectDiagnostics)
+                .map(([k, v]) => `${k}=${v}`)
+                .join(" · ");
+            historyItems.push({
+                label: `$(info) Aucune session OpenCode/Codex détectée pour ce dossier`,
+                detail: diag || "Cherche dans ~/.local/share/opencode/opencode.db et ~/.codex/sessions/"
+            });
+        }
+        if (openCodeHistory.length) {
+            historyItems.push({
+                label: "OpenCode · sessions détectées",
+                kind: vscode.QuickPickItemKind.Separator
+            });
+            for (const h of openCodeHistory) {
+                const live = currentSession.has(h.id) || isLiveSession(h.updatedAt);
+                historyItems.push({
+                    label: `${live ? "$(sync~spin)" : "$(terminal)"} ${h.title}`,
+                    description: `${freshnessDot(h.updatedAt)} ${formatRelativeFr(h.updatedAt)}${live ? " · en cours" : ""} · ${h.detail}`,
+                    detail: h.resumeCommand,
+                    history: h
+                });
+            }
+        }
+        if (codexHistory.length) {
+            historyItems.push({
+                label: "Codex · sessions détectées",
+                kind: vscode.QuickPickItemKind.Separator
+            });
+            for (const h of codexHistory) {
+                const live = isLiveSession(h.updatedAt);
+                historyItems.push({
+                    label: `${live ? "$(sync~spin)" : "$(terminal)"} ${h.title}`,
+                    description: `${freshnessDot(h.updatedAt)} ${formatRelativeFr(h.updatedAt)}${live ? " · en cours" : ""} · ${h.detail}`,
+                    detail: h.resumeCommand,
+                    history: h
+                });
+            }
+        }
         const separator = sessions.length
             ? { label: "Sessions archivées", kind: vscode.QuickPickItemKind.Separator }
             : { label: "" };
@@ -7093,6 +7213,7 @@ function activate(context) {
                 description: ".vscode/pkvsconf-agent-resumes.md",
                 action: "openSummary"
             },
+            ...historyItems,
             ...(sessions.length ? [separator] : []),
             ...sessions.map((session) => ({
                 label: `$(play) ${session.label}`,
@@ -7110,6 +7231,28 @@ function activate(context) {
         }
         if (pick.action === "openSummary") {
             await openProjectAgentResume(workspaceRoot);
+            return;
+        }
+        if (pick.history) {
+            const h = pick.history;
+            const action = await vscode.window.showQuickPick([
+                { label: "$(play) Reprendre dans un terminal", action: "resume" },
+                { label: `$(copy) Copier « ${h.resumeCommand} »`, action: "copy" }
+            ], { placeHolder: `Session ${h.source} · ${h.title}` });
+            if (!action)
+                return;
+            if (action.action === "resume") {
+                const terminal = vscode.window.createTerminal({
+                    name: `${h.source}: ${h.title.slice(0, 40)}`,
+                    cwd: workspaceRoot
+                });
+                terminal.show(true);
+                terminal.sendText(h.resumeCommand, true);
+            }
+            else {
+                await vscode.env.clipboard.writeText(h.resumeCommand);
+                vscode.window.showInformationMessage(`Copié: ${h.resumeCommand}`);
+            }
             return;
         }
         if (pick.session) {
@@ -7709,6 +7852,7 @@ function activate(context) {
         await vscode.commands.executeCommand("workbench.action.terminal.newInActiveGroup");
     });
     const statusBarTerm = vscode.window.createStatusBarItem("pkvsconf.statusBarTerm", vscode.StatusBarAlignment.Left, 99);
+    (0, featureToggles_1.guardStatusBarItem)(statusBarTerm, "termShortcuts");
     statusBarTerm.text = "$(terminal) Term";
     statusBarTerm.tooltip = "Open Terminal in New Editor Tab";
     statusBarTerm.command = "pkvsconf.terminalNewTab";

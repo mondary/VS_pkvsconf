@@ -21,6 +21,8 @@
 - 🚀 Projects Launchpad (fullscreen + list + quick switch)
 - 📋 Kanban TUI with Backlog, In Progress, In Review and Done cards
 - 🔗 Agent Skills: `.agent` symlink to the central `-agent` folder
+- 📜 Real session history for the project's OpenCode & Codex sessions, auto-detected (one-click resume)
+- ⚙️ Toggles menu: enable/disable each feature on the fly (palette → "Fonctionnalités")
 - ⛔ Add to .gitignore (right-click in explorer)
 - 👁️ Gitignore decorations: `⛔` badge on ignored files/folders in explorer
 - 🎯 Native codicon icons on all views (rocket, note, history, tag, palette)

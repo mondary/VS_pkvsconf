@@ -2,7 +2,7 @@
   "name": "vs-pkvsconf",
   "displayName": "VS_pkvsconf",
   "description": "Adds a toolbar button in Explorer to reveal the active file in Finder.",
-  "version": "2.2026.27",
+  "version": "2.2026.34",
   "publisher": "Cmondary",
   "icon": "icon.png",
   "license": "MIT",
@@ -60,7 +60,8 @@
     "onView:launchpadExplorerView",
     "onView:agentHistoryView",
     "onView:workspaceSizesView",
-    "onStartupFinished"
+    "onStartupFinished",
+    "onCommand:pkvsconf.toggleFeatures"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -391,6 +392,12 @@
         "command": "pkvsconf.addToGitignore",
         "title": "⛔ Ajouter au .gitignore",
         "icon": "$(exclude)"
+      },
+      {
+        "command": "pkvsconf.toggleFeatures",
+        "title": "Fonctionnalités : activer / désactiver",
+        "category": "PK VS Conf",
+        "icon": "$(settings-gear)"
       }
     ],
     "colors": [
@@ -419,25 +426,29 @@
           "id": "workspaceSizesView",
           "name": "Project Size",
           "type": "webview",
-          "icon": "$(database)"
+          "icon": "$(database)",
+          "when": "pkvsconf.enable.explorerSizes"
         },
         {
           "id": "agentHistoryView",
           "name": "Agent History",
-          "icon": "$(history)"
+          "icon": "$(history)",
+          "when": "pkvsconf.enable.sessions"
         },
         {
           "id": "extensionTagsView",
           "name": "PK Extensions",
           "type": "webview",
-          "icon": "$(tag)"
+          "icon": "$(tag)",
+          "when": "pkvsconf.enable.extensionTags"
         },
         {
           "id": "launchpadExplorerView",
           "name": "Launchpad Projets",
           "type": "webview",
           "collapsed": false,
-          "icon": "$(rocket)"
+          "icon": "$(rocket)",
+          "when": "pkvsconf.enable.launchpad"
         },
         {
           "id": "projectIconView",
@@ -445,7 +456,8 @@
           "type": "webview",
           "collapsed": false,
           "visibility": "visible",
-          "icon": "$(symbol-color)"
+          "icon": "$(symbol-color)",
+          "when": "pkvsconf.enable.projectIcon"
         }
       ],
       "pkvsconfRightSidebar": [
@@ -454,7 +466,8 @@
           "name": "Notes Projet",
           "type": "webview",
           "collapsed": false,
-          "icon": "$(note)"
+          "icon": "$(note)",
+          "when": "pkvsconf.enable.notes"
         }
       ],
       "pkvsconfNotesContainer": []
@@ -462,10 +475,12 @@
     "menus": {
       "commandPalette": [
         {
-          "command": "revealInFinderButton.openGitHubRepo"
+          "command": "revealInFinderButton.openGitHubRepo",
+          "when": "pkvsconf.enable.githubRepo"
         },
         {
-          "command": "pkvsconf.addTagToExtension"
+          "command": "pkvsconf.addTagToExtension",
+          "when": "pkvsconf.enable.extensionTags"
         },
         {
           "command": "pkvsconf.codexCaptureResume"
@@ -483,113 +498,116 @@
           "command": "pkvsconf.regenerateWorkspaceTitlebarColor"
         },
         {
-          "command": "pkvsconf.createSkillsSymlink"
+          "command": "pkvsconf.createSkillsSymlink",
+          "when": "pkvsconf.enable.skillsSymlink"
         },
-      {
-        "command": "pkvsconf.openInDefaultBrowser",
-        "when": "resourceExtname =~ /\\.html?$/"
-      },
-      {
-        "command": "pkvsconf.addToGitignore",
-        "when": "false"
-      },
-      {
-        "command": "pkvsconf.sizeExplorerRefresh",
-        "when": "explorerViewletVisible"
-      }
-    ],
+        {
+          "command": "pkvsconf.openInDefaultBrowser",
+          "when": "resourceExtname =~ /\\.html?$/ && pkvsconf.enable.previewPage"
+        },
+        {
+          "command": "pkvsconf.addToGitignore",
+          "when": "false && pkvsconf.enable.gitignoreMenu"
+        },
+        {
+          "command": "pkvsconf.sizeExplorerRefresh",
+          "when": "explorerViewletVisible && pkvsconf.enable.explorerSizes"
+        }
+      ],
       "extension/context": [
         {
           "command": "pkvsconf.addTagToExtension",
-          "when": "extensionIsInstalled",
+          "when": "extensionIsInstalled && pkvsconf.enable.extensionTags",
           "group": "navigation@1"
         }
       ],
       "explorer/context": [
         {
           "command": "pkvsconf.openInDefaultBrowser",
-          "when": "resourceExtname =~ /\\.html?$/",
+          "when": "resourceExtname =~ /\\.html?$/ && pkvsconf.enable.previewPage",
           "group": "navigation@2"
         },
         {
           "command": "pkvsconf.addToGitignore",
-          "group": "navigation@3"
+          "group": "navigation@3",
+          "when": "pkvsconf.enable.gitignoreMenu"
         }
       ],
       "editor/context": [
         {
           "command": "pkvsconf.openInDefaultBrowser",
-          "when": "resourceExtname =~ /\\.html?$/",
+          "when": "resourceExtname =~ /\\.html?$/ && pkvsconf.enable.previewPage",
           "group": "navigation@2"
         }
       ],
       "scm/title": [
         {
           "command": "revealInFinderButton.openGitHubRepo",
-          "group": "navigation"
+          "group": "navigation",
+          "when": "pkvsconf.enable.githubRepo"
         },
         {
           "command": "pkvsconf.commitWithSecretCheck",
           "group": "navigation",
-          "when": "scmProvider == git"
+          "when": "scmProvider == git && pkvsconf.enable.secrets"
         }
       ],
       "view/title": [
         {
           "command": "revealInFinderButton.revealActive",
-          "when": "view == workbench.explorer.fileView && isMac",
+          "when": "view == workbench.explorer.fileView && isMac && pkvsconf.enable.revealInFinder",
           "group": "navigation"
         },
         {
           "command": "pkvsconf.createSkillsSymlink",
-          "when": "view == workbench.explorer.fileView",
+          "when": "view == workbench.explorer.fileView && pkvsconf.enable.skillsSymlink",
           "group": "navigation"
         },
         {
           "command": "pkvsconf.launchpadOpen",
-          "when": "view == projectIconView",
+          "when": "view == projectIconView && pkvsconf.enable.launchpad",
           "group": "navigation"
         },
         {
           "command": "pkvsconf.launchpadAddCurrent",
-          "when": "view == projectIconView",
+          "when": "view == projectIconView && pkvsconf.enable.launchpad",
           "group": "navigation"
         },
         {
           "command": "revealInFinderButton.openGitHubRepo",
-          "when": "view == workbench.scm",
+          "when": "view == workbench.scm && pkvsconf.enable.githubRepo",
           "group": "navigation"
         },
         {
           "command": "pkvsconf.searchExtensions",
-          "when": "view == extensionTagsView",
+          "when": "view == extensionTagsView && pkvsconf.enable.extensionTags",
           "group": "navigation"
         },
         {
           "command": "pkvsconf.sizeExplorerRefresh",
-          "when": "view == workspaceSizesView",
+          "when": "view == workspaceSizesView && pkvsconf.enable.explorerSizes",
           "group": "navigation"
         }
       ],
       "view/item/context": [
         {
           "command": "pkvsconf.addTagToExtension",
-          "when": "view == extensionTagsView && viewItem == extensionListItem",
+          "when": "view == extensionTagsView && viewItem == extensionListItem && pkvsconf.enable.extensionTags",
           "group": "inline"
         },
         {
           "command": "pkvsconf.launchpadOpen",
-          "when": "view == launchpadExplorerView && viewItem == launchpadProject",
+          "when": "view == launchpadExplorerView && viewItem == launchpadProject && pkvsconf.enable.launchpad",
           "group": "navigation"
         },
         {
           "command": "pkvsconf.launchpadToggleFavorite",
-          "when": "view == launchpadExplorerView && viewItem == launchpadProject",
+          "when": "view == launchpadExplorerView && viewItem == launchpadProject && pkvsconf.enable.launchpad",
           "group": "inline"
         },
         {
           "command": "pkvsconf.launchpadRevealInFinder",
-          "when": "view == launchpadExplorerView && viewItem == launchpadProject",
+          "when": "view == launchpadExplorerView && viewItem == launchpadProject && pkvsconf.enable.launchpad",
           "group": "inline"
         }
       ]

@@ -36,6 +36,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.registerKanban = registerKanban;
 const path = __importStar(require("path"));
 const vscode = __importStar(require("vscode"));
+const featureToggles_1 = require("./featureToggles");
 const KANBAN_TERMINAL_NAME = "PK Kanban";
 async function openKanban(context, editor) {
     const workspace = vscode.workspace.workspaceFolders?.[0];
@@ -72,12 +73,14 @@ async function openKanban(context, editor) {
 }
 function registerKanban(context) {
     const panelBtn = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 92);
+    (0, featureToggles_1.guardStatusBarItem)(panelBtn, "kanban");
     panelBtn.name = "PK Kanban (terminal)";
     panelBtn.text = "$(terminal) Kanban";
     panelBtn.tooltip = "Ouvrir le Kanban dans le volet terminal du bas";
     panelBtn.command = "pkvsconf.kanbanOpen";
     panelBtn.show();
     const editorBtn = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 91);
+    (0, featureToggles_1.guardStatusBarItem)(editorBtn, "kanban");
     editorBtn.name = "PK Kanban (éditeur)";
     editorBtn.text = "$(go-to-editor) Kanban";
     editorBtn.tooltip = "Ouvrir le Kanban dans un onglet de l'éditeur";

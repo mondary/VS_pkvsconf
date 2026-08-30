@@ -6,7 +6,7 @@ Toutes les modifications notables de **VS_pkvsconf** sont documentées ici.
 
 ## TODO — Roadmap
 
-Statut : `2.2026.27`
+Statut : `2.2026.34`
 
 ### Feature 1 — Add to .gitignore ✅
 - [x] Commande « ⛔ Ajouter au .gitignore » au clic droit explorer
@@ -70,6 +70,37 @@ Statut : `2.2026.27`
 ---
 
 ## Releases
+
+### [2.2026.34] - 2026-08-30
+#### Fixed
+- ▶️ Session « en cours » fiable : le plugin TUI écrit maintenant un fichier par session vivante (`current-sessions/<id>.json`, heartbeat 30 s) et **le supprime à la fermeture** ; le picker considère une session vivante seulement si son fichier a moins de 90 s. L'heuristique de repli passe de 5 min à 2 min. Fini les spinners fantômes après fermeture d'onglet.
+
+### [2.2026.33] - 2026-08-30
+#### Added
+- ▶️ Plugin TUI OpenCode `~/.config/opencode/plugins/current-session.js` : publie l'ID de la session ouverte dans `~/.local/share/opencode/current-session.json` (heartbeat 60 s). Le picker Sessions marque ensuite la vraie session en cours (détection exacte par ID, au lieu de la seule heuristique des 5 min).
+- Astuce CLI : `opencode session list | sed -n 2p` affiche l'ID de la session la plus récente.
+
+### [2.2026.32] - 2026-08-30
+#### Changed
+- 🔴 Fraîcheur : les sessions de plus de 30 j passent au rouge (au lieu du blanc).
+- ▶️ Session en cours : icône `$(sync~spin)` tournante + mention « en cours » pour toute session active il y a moins de 5 min (ex. celle ouverte dans le terminal).
+
+### [2.2026.31] - 2026-08-30
+#### Changed
+- 🎨 Picker Sessions : lisibilité — pastille de fraîcheur colorée (🟢 <24h · 🟡 <7j · 🟠 <30j · ⚪ avant), dates relatives en français, modèle + tokens dans la colonne de droite.
+
+### [2.2026.30] - 2026-08-30
+#### Fixed
+- 📜 Sessions : détection multi-dossiers (workspaces multi-root / .code-workspace), fallback `/usr/bin/sqlite3` si absent du PATH de l'extension host, et diagnostic visible dans la ligne « Aucune session détectée » (dossiers scannés, base trouvée, erreur éventuelle).
+
+### [2.2026.29] - 2026-08-30
+#### Added
+- ⚙️ Menu « Fonctionnalités : activer / désactiver » (`pkvsconf.toggleFeatures`, palette de commandes) : toggle des 17 features — boutons status bar, vues latérales, boutons Explorer/SCM, menus contextuels, décorations gitignore et tailles. État persisté (globalState), appliqué à chaud sans reload via context keys + guards.
+- 📜 Sessions : ligne « Aucune session détectée » dans le picker quand aucune session OpenCode/Codex n'existe pour le dossier (retour visuel immédiat).
+
+### [2.2026.28] - 2026-08-30
+#### Added
+- 🧠 Historique réel des sessions agents : le picker `$(history) Sessions` détecte maintenant automatiquement les sessions **OpenCode** (base SQLite `~/.local/share/opencode/opencode.db`) et **Codex** (`~/.codex/sessions/`) du projet courant — titre, modèle, tokens, date — filtrées strictement sur le dossier du workspace. Reprise en un clic (`opencode -s <id>` / `codex resume <id>`) ou copie de la commande. Titres codex extraits du premier message utilisateur réel. Zéro dépendance (CLI `sqlite3` macOS).
 
 ### [2.2026.27] - 2026-08-27
 #### Fixed

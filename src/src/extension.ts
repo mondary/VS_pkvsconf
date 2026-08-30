@@ -7,6 +7,18 @@ import * as util from "util";
 import * as net from "net";
 import * as os from "os";
 import { registerKanban } from "./kanban";
+import {
+  AgentSessionHistoryEntry,
+  collectProjectSessionHistory,
+  lastSessionCollectDiagnostics
+} from "./sessionHistory";
+import {
+  guardStatusBarItem,
+  initFeatureToggles,
+  isFeatureEnabled,
+  onFeatureTogglesChanged,
+  registerFeatureTogglesCommand
+} from "./featureToggles";
 
 const execAsync = util.promisify(cp.exec);
 
@@ -613,6 +625,7 @@ type LaunchpadCombinedQuickPickItem =
 type ProjectAgentSessionQuickPickItem = vscode.QuickPickItem & {
   session?: ProjectAgentSession;
   action?: "editJson" | "openSummary" | "delete";
+  history?: AgentSessionHistoryEntry;
 };
 
 function isProjectInLaunchpad(
@@ -1209,6 +1222,54 @@ function getWorkspaceRootFsPath(): string | undefined {
     return undefined;
   }
   return ws.uri.fsPath;
+}
+
+function freshnessDot(ts: number): string {
+  const days = (Date.now() - ts) / 86400000;
+  if (days < 1) return "🟢";
+  if (days < 7) return "🟡";
+  if (days < 30) return "🟠";
+  return "🔴";
+}
+
+function isLiveSession(ts: number): boolean {
+  return Date.now() - ts < 2 * 60000;
+}
+
+async function readLiveOpenCodeSessions(): Promise<Set<string>> {
+  const live = new Set<string>();
+  const dir = path.join(os.homedir(), ".local", "share", "opencode", "current-sessions");
+  let files: string[];
+  try {
+    files = await fs.readdir(dir);
+  } catch {
+    return live;
+  }
+  for (const file of files) {
+    if (!file.endsWith(".json")) continue;
+    try {
+      const parsed = JSON.parse(
+        await fs.readFile(path.join(dir, file), "utf8")
+      ) as { id?: string; time?: number };
+      if (parsed.id && parsed.time && Date.now() - parsed.time < 90_000) {
+        live.add(parsed.id);
+      }
+    } catch {
+      /* fichier corrompu, on ignore */
+    }
+  }
+  return live;
+}
+
+function formatRelativeFr(ts: number): string {
+  const min = Math.round((Date.now() - ts) / 60000);
+  if (min < 1) return "à l'instant";
+  if (min < 60) return `il y a ${min} min`;
+  const h = Math.round(min / 60);
+  if (h < 24) return `il y a ${h} h`;
+  const j = Math.round(h / 24);
+  if (j < 30) return `il y a ${j} j`;
+  return `il y a ${Math.round(j / 30)} mois`;
 }
 
 async function ensureDir(dirPath: string) {
@@ -5113,6 +5174,7 @@ class GitignoreDecorationProvider implements vscode.FileDecorationProvider {
   }
 
   provideFileDecoration(uri: vscode.Uri): vscode.FileDecoration | undefined {
+    if (!isFeatureEnabled("gitignoreDecorations")) return undefined;
     if (this.ignoredPaths.has(uri.fsPath)) {
       return {
         badge: "⛔",
@@ -5295,6 +5357,7 @@ class NativeSizeDecorationProvider implements vscode.FileDecorationProvider {
   }
 
   provideFileDecoration(uri: vscode.Uri): vscode.FileDecoration | Promise<vscode.FileDecoration> | undefined {
+    if (!isFeatureEnabled("explorerSizes")) return undefined;
     if (!this.enabled || uri.scheme !== "file") return undefined;
     if (!vscode.workspace.getWorkspaceFolder(uri)) return undefined;
 
@@ -7019,6 +7082,8 @@ async function createPreviewTooltip(uri: vscode.Uri, bytes: number): Promise<vsc
 
 export function activate(context: vscode.ExtensionContext) {
   sizeDecorLog("[activate] START");
+  void initFeatureToggles(context);
+  context.subscriptions.push(registerFeatureTogglesCommand(context));
   try {
     registerKanban(context);
     sizeDecorLog("[activate] after registerKanban");
@@ -7034,6 +7099,9 @@ export function activate(context: vscode.ExtensionContext) {
     gitignoreProvider = decorationProvider;
     context.subscriptions.push(
       vscode.window.registerFileDecorationProvider(decorationProvider)
+    );
+    context.subscriptions.push(
+      onFeatureTogglesChanged(() => void decorationProvider.refresh())
     );
 
     void decorationProvider.refresh();
@@ -7077,6 +7145,7 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.StatusBarAlignment.Left,
     92
   );
+  guardStatusBarItem(agentSessionsItem, "sessions");
   agentSessionsItem.text = "$(history) Sessions";
   agentSessionsItem.tooltip = "Voir les sessions agents archivées pour ce projet";
   agentSessionsItem.command = "pkvsconf.projectAgentSessions";
@@ -7186,6 +7255,9 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
       vscode.window.registerFileDecorationProvider(nativeSizeDecorationProvider)
     );
+    context.subscriptions.push(
+      onFeatureTogglesChanged(() => nativeSizeDecorationProvider?.refresh())
+    );
     sizeDecorLog(
       `[init] SizeExplorerProvider registered. workspaceRoot=${vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? "<none>"}`
     );
@@ -7262,6 +7334,7 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.StatusBarAlignment.Left,
     100
   );
+  guardStatusBarItem(rootSizeItem, "rootSize");
   rootSizeItem.text = "Root size: --";
   rootSizeItem.tooltip = "Click to open the root folder in Finder";
   rootSizeItem.command = "revealInFinderButton.openRootFolderInFinder";
@@ -7274,6 +7347,7 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.StatusBarAlignment.Left,
     98
   );
+  guardStatusBarItem(previewItem, "previewPage");
   previewItem.text = "$(open-preview) Preview";
   previewItem.tooltip = "Lancer une preview de la page en cours";
   previewItem.command = "pkvsconf.previewActivePage";
@@ -7283,6 +7357,7 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.StatusBarAlignment.Left,
     99
   );
+  guardStatusBarItem(serverItem, "previewPage");
   serverItem.text = "$(play) Server";
   serverItem.tooltip = "Lancer le serveur PHP et ouvrir le navigateur";
   serverItem.command = "pkvsconf.launchServer";
@@ -7292,6 +7367,7 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.StatusBarAlignment.Left,
     97
   );
+  guardStatusBarItem(titlebarColorItem, "titlebarColor");
   titlebarColorItem.text = "$(symbol-color) Title Bar";
   titlebarColorItem.tooltip = "Changer la couleur de la barre de titre (aléatoire)";
   titlebarColorItem.command = "pkvsconf.regenerateWorkspaceTitlebarColor";
@@ -7302,6 +7378,7 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.StatusBarAlignment.Left,
     96
   );
+  guardStatusBarItem(secretsItem, "secrets");
   secretsItem.text = "$(shield) Secrets: --";
   secretsItem.tooltip = "Détection des secrets exposés";
   secretsItem.command = "pkvsconf.showExposedSecrets";
@@ -7312,6 +7389,7 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.StatusBarAlignment.Left,
     95
   );
+  guardStatusBarItem(skillsSymlinkItem, "skillsSymlink");
   skillsSymlinkItem.text = "$(link) Agent Skills";
   skillsSymlinkItem.tooltip = "Créer un lien symbolique .agent vers le dossier -agent";
   skillsSymlinkItem.command = "pkvsconf.createSkillsSymlink";
@@ -7321,6 +7399,7 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.StatusBarAlignment.Left,
     94
   );
+  guardStatusBarItem(launchpadListItem, "launchpad");
   launchpadListItem.text = "$(list-unordered) Projets";
   launchpadListItem.tooltip = "Ouvrir l'ancienne liste du Launchpad";
   launchpadListItem.command = "pkvsconf.launchpadOpenList";
@@ -7330,6 +7409,7 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.StatusBarAlignment.Left,
     93
   );
+  guardStatusBarItem(launchpadItem, "launchpad");
   launchpadItem.text = "$(rocket) Launchpad";
   launchpadItem.tooltip = "Ouvrir le Launchpad projets en plein écran";
   launchpadItem.command = "pkvsconf.launchpadOpen";
@@ -8013,7 +8093,58 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.window.showWarningMessage("Ouvrez un projet pour accéder à ses sessions agents.");
         return;
       }
+      const allRoots = [
+        ...new Set(
+          (vscode.workspace.workspaceFolders ?? [])
+            .filter((folder) => folder.uri.scheme === "file")
+            .map((folder) => folder.uri.fsPath)
+        )
+      ];
+      const history = await collectProjectSessionHistory(allRoots.length ? allRoots : [workspaceRoot]);
       const sessions = await getProjectAgentSessions(workspaceRoot);
+      const currentSession = await readLiveOpenCodeSessions();
+      const openCodeHistory = history.filter((h) => h.source === "opencode");
+      const codexHistory = history.filter((h) => h.source === "codex");
+      const historyItems: Array<ProjectAgentSessionQuickPickItem> = [];
+      if (!history.length) {
+        const diag = Object.entries(lastSessionCollectDiagnostics)
+          .map(([k, v]) => `${k}=${v}`)
+          .join(" · ");
+        historyItems.push({
+          label: `$(info) Aucune session OpenCode/Codex détectée pour ce dossier`,
+          detail: diag || "Cherche dans ~/.local/share/opencode/opencode.db et ~/.codex/sessions/"
+        });
+      }
+      if (openCodeHistory.length) {
+        historyItems.push({
+          label: "OpenCode · sessions détectées",
+          kind: vscode.QuickPickItemKind.Separator
+        });
+        for (const h of openCodeHistory) {
+          const live = currentSession.has(h.id) || isLiveSession(h.updatedAt);
+          historyItems.push({
+            label: `${live ? "$(sync~spin)" : "$(terminal)"} ${h.title}`,
+            description: `${freshnessDot(h.updatedAt)} ${formatRelativeFr(h.updatedAt)}${live ? " · en cours" : ""} · ${h.detail}`,
+            detail: h.resumeCommand,
+            history: h
+          });
+        }
+      }
+      if (codexHistory.length) {
+        historyItems.push({
+          label: "Codex · sessions détectées",
+          kind: vscode.QuickPickItemKind.Separator
+        });
+        for (const h of codexHistory) {
+          const live = isLiveSession(h.updatedAt);
+          historyItems.push({
+            label: `${live ? "$(sync~spin)" : "$(terminal)"} ${h.title}`,
+            description: `${freshnessDot(h.updatedAt)} ${formatRelativeFr(h.updatedAt)}${live ? " · en cours" : ""} · ${h.detail}`,
+            detail: h.resumeCommand,
+            history: h
+          });
+        }
+      }
       const separator: vscode.QuickPickItem = sessions.length
         ? { label: "Sessions archivées", kind: vscode.QuickPickItemKind.Separator }
         : { label: "" };
@@ -8028,6 +8159,7 @@ export function activate(context: vscode.ExtensionContext) {
           description: ".vscode/pkvsconf-agent-resumes.md",
           action: "openSummary"
         },
+        ...historyItems,
         ...(sessions.length ? [separator] : []),
         ...sessions.map((session) => ({
           label: `$(play) ${session.label}`,
@@ -8047,6 +8179,29 @@ export function activate(context: vscode.ExtensionContext) {
       }
       if (pick.action === "openSummary") {
         await openProjectAgentResume(workspaceRoot);
+        return;
+      }
+      if (pick.history) {
+        const h = pick.history;
+        const action = await vscode.window.showQuickPick(
+          [
+            { label: "$(play) Reprendre dans un terminal", action: "resume" as const },
+            { label: `$(copy) Copier « ${h.resumeCommand} »`, action: "copy" as const }
+          ],
+          { placeHolder: `Session ${h.source} · ${h.title}` }
+        );
+        if (!action) return;
+        if (action.action === "resume") {
+          const terminal = vscode.window.createTerminal({
+            name: `${h.source}: ${h.title.slice(0, 40)}`,
+            cwd: workspaceRoot
+          });
+          terminal.show(true);
+          terminal.sendText(h.resumeCommand, true);
+        } else {
+          await vscode.env.clipboard.writeText(h.resumeCommand);
+          vscode.window.showInformationMessage(`Copié: ${h.resumeCommand}`);
+        }
         return;
       }
       if (pick.session) {
@@ -8807,6 +8962,7 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.StatusBarAlignment.Left,
     99
   );
+  guardStatusBarItem(statusBarTerm, "termShortcuts");
   statusBarTerm.text = "$(terminal) Term";
   statusBarTerm.tooltip = "Open Terminal in New Editor Tab";
   statusBarTerm.command = "pkvsconf.terminalNewTab";

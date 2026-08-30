@@ -21,6 +21,8 @@
 - 🚀 Launchpad projets (plein écran + liste + bascule rapide)
 - ⭐ Favoris Launchpad : épingler vos projets préférés en haut de la liste
 - 🧠 Sessions agents par projet : archive, résumé et reprise sans conserver les processus actifs
+- 📜 Historique réel des sessions OpenCode & Codex du projet, détecté automatiquement (reprise en un clic)
+- ⚙️ Menu de toggles : activer/désactiver chaque fonctionnalité à chaud (palette → « Fonctionnalités »)
 - 📋 Kanban TUI avec cartes Backlog, In Progress, In Review et Done
 - 🔗 Agent Skills : symlink `.agent` vers le dossier central `-agent`
 - ⛔ Ajouter au .gitignore (clic droit dans l'explorateur)
@@ -46,6 +48,7 @@
 - Launchpad : boutons dans la vue Project Icon pour ouvrir le plein écran et ajouter le projet courant. Raccourci `Cmd/Ctrl+Alt+L` pour la liste.
 - Favoris Launchpad : clic droit sur un projet → "Ajouter aux favoris" ou "Retirer des favoris", ou raccourci `Cmd/Ctrl+Alt+Shift+S`. Les favoris apparaissent en haut de la grille et dans le QuickPick. Badge ★ doré sur les projets favoris.
 - Sessions agents : le bouton `$(history) Sessions` de la status bar ouvre les reprises archivées du projet. Depuis la liste, tu peux reprendre, supprimer, ou éditer directement `.vscode/pkvsconf-agent-sessions.json`. Les résumés restent dans `.vscode/pkvsconf-agent-resumes.md`. La dernière session est proposée une fois à l'ouverture du projet.
+- Historique réel : le même picker affiche les sections « OpenCode · sessions détectées » et « Codex · sessions détectées », lues directement depuis les données locales des agents (SQLite opencode + fichiers de sessions codex), filtrées sur le dossier du projet. Reprendre ouvre un terminal avec `opencode -s <id>` ou `codex resume <id>`.
 - Ordre des vues : `Launchpad Projets` apparaît avant `Project Icon` dans l'Explorer.
 - Kanban : bouton `Kanban` dans la barre de status. Chaque carte peut lancer ou reprendre une session OpenCode isolée dans `tmux`.
 - ⛔ Add to .gitignore : clic droit sur un fichier/dossier dans l'explorateur → ajout automatique au `.gitignore` (création si absent, dédoublonnage).
