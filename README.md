@@ -24,7 +24,7 @@
 - 📜 Historique réel des sessions OpenCode & Codex du projet, détecté automatiquement (reprise en un clic)
 - ⚙️ Menu de toggles : activer/désactiver chaque fonctionnalité à chaud (palette → « Fonctionnalités »)
 - 📋 Kanban TUI avec cartes Backlog, In Progress, In Review et Done
-- 🔗 Agent Skills : symlink `.agent` vers le dossier central `-agent`
+- 🔗 Agent Skills : symlinks `.agent` → `-agent` et `.inspi` → `-inspi` (librairie d'inspiration design, fichiers HTML)
 - ⛔ Ajouter au .gitignore (clic droit dans l'explorateur)
 - 👁️ Décorations gitignore : badge `⛔` sur les fichiers/dossiers ignorés dans l'explorateur
 - 🎯 Icônes codicons sur toutes les vues (fusée, note, historique, tag, palette)

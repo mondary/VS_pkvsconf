@@ -19,7 +19,7 @@
 - 🛡️ Blocage de commit avec secrets
 - 🚀 Launchpad projets (vue plein écran type macOS Launchpad + bascule rapide)
 - 📋 Kanban TUI avec cartes Backlog, In Progress, In Review et Done
-- 🔗 Agent Skills : symlink `.agent` vers le dossier central `-agent`
+- 🔗 Agent Skills : symlinks `.agent` → `-agent` et `.inspi` → `-inspi` (librairie d'inspiration design, fichiers HTML)
 ## 🧠 Utilisation
 
 - Reveal in Finder : bouton en haut du panneau Explorer (macOS).

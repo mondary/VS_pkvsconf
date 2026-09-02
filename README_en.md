@@ -20,7 +20,7 @@
 - 🛡️ Commit blocking with secrets
 - 🚀 Projects Launchpad (fullscreen + list + quick switch)
 - 📋 Kanban TUI with Backlog, In Progress, In Review and Done cards
-- 🔗 Agent Skills: `.agent` symlink to the central `-agent` folder
+- 🔗 Agent Skills: `.agent` → `-agent` and `.inspi` → `-inspi` symlinks (design inspiration library, HTML files)
 - 📜 Real session history for the project's OpenCode & Codex sessions, auto-detected (one-click resume)
 - ⚙️ Toggles menu: enable/disable each feature on the fly (palette → "Fonctionnalités")
 - ⛔ Add to .gitignore (right-click in explorer)
@@ -42,7 +42,7 @@
 - Page preview: status bar button, PHP supported with auto server.
 - Title bar: auto color per workspace, button to regenerate.
 - Secrets: workspace scan + block commit if staged secrets.
-- Agent Skills: creates a `.agent` symlink to the central `-agent` folder.
+- Agent Skills: creates `.agent` → `-agent` and `.inspi` → `-inspi` symlinks.
 - Launchpad: buttons in the Project Icon view to open fullscreen and add the current project. Shortcut `Cmd/Ctrl+Alt+L` for the list.
 - View order: `Launchpad Projets` appears before `Project Icon` in Explorer.
 - Kanban: `Kanban` status bar button. Each card can start or resume an isolated OpenCode session in `tmux`.

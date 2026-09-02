@@ -6644,7 +6644,7 @@ function activate(context) {
     const skillsSymlinkItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 95);
     (0, featureToggles_1.guardStatusBarItem)(skillsSymlinkItem, "skillsSymlink");
     skillsSymlinkItem.text = "$(link) Agent Skills";
-    skillsSymlinkItem.tooltip = "Créer un lien symbolique .agent vers le dossier -agent";
+    skillsSymlinkItem.tooltip = "Créer les liens symboliques .agent et .inspi vers les dossiers -agent et -inspi";
     skillsSymlinkItem.command = "pkvsconf.createSkillsSymlink";
     skillsSymlinkItem.show();
     const launchpadListItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 94);
@@ -7617,6 +7617,7 @@ function activate(context) {
         const gitignorePath = path.join(workspaceRoot, ".gitignore");
         const gitignoreEntries = [
             ".agent",
+            ".inspi",
             "/AGENT.md",
             "/AGENTS.md",
             "/CLAUDE.md",
@@ -7660,40 +7661,50 @@ function activate(context) {
                 }
             }
         };
-        let symlinkCreated = false;
-        let symlinkUpdated = false;
-        let symlinkSkipped = false;
-        let agentFilesLinked = false;
-        // Vérifier si le symlink existe déjà et s'il pointe vers la bonne cible
-        try {
-            const targetStats = await fs.lstat(targetPath);
-            if (!targetStats.isSymbolicLink()) {
-                // Keep existing local .agent folder and still try running linker script from workspace.
-                symlinkSkipped = true;
-            }
-            else {
-                const existingLinkTarget = await fs.readlink(targetPath);
-                if (existingLinkTarget !== sourcePath) {
-                    await fs.unlink(targetPath);
-                    await fs.symlink(sourcePath, targetPath, "dir");
-                    symlinkUpdated = true;
+        const ensureSymlink = async (srcPath, dstPath) => {
+            try {
+                const targetStats = await fs.lstat(dstPath);
+                if (!targetStats.isSymbolicLink()) {
+                    // Keep existing local folder, don't overwrite.
+                    return "skipped";
                 }
+                const existingLinkTarget = await fs.readlink(dstPath);
+                if (existingLinkTarget !== srcPath) {
+                    await fs.unlink(dstPath);
+                    await fs.symlink(srcPath, dstPath, "dir");
+                    return "updated";
+                }
+                return "exists";
             }
+            catch (error) {
+                if (error.code !== "ENOENT") {
+                    throw error;
+                }
+                await fs.symlink(srcPath, dstPath, "dir");
+                return "created";
+            }
+        };
+        let agentSymlinkState;
+        let inspiSymlinkState;
+        let agentFilesLinked = false;
+        // Lien .agent -> -agent
+        try {
+            agentSymlinkState = await ensureSymlink(sourcePath, targetPath);
         }
         catch (error) {
-            if (error.code !== "ENOENT") {
-                vscode.window.showErrorMessage(`Erreur lors de la vérification du lien symbolique: ${error}`);
-                return;
-            }
-            // Créer le symlink
-            try {
-                await fs.symlink(sourcePath, targetPath, "dir");
-                symlinkCreated = true;
-            }
-            catch (symlinkError) {
-                vscode.window.showErrorMessage(`Erreur lors de la création du lien symbolique: ${symlinkError}`);
-                return;
-            }
+            vscode.window.showErrorMessage(`Erreur lors de la vérification du lien symbolique: ${error}`);
+            return;
+        }
+        // Lien .inspi -> -inspi (crée le dossier cible si absent)
+        const inspiSourcePath = `/Users/${username}/Documents/GitHub/-inspi`;
+        const inspiTargetPath = path.join(workspaceRoot, ".inspi");
+        try {
+            await fs.mkdir(inspiSourcePath, { recursive: true });
+            inspiSymlinkState = await ensureSymlink(inspiSourcePath, inspiTargetPath);
+        }
+        catch (error) {
+            vscode.window.showErrorMessage(`Erreur lors de la création du lien .inspi: ${error}`);
+            return;
         }
         try {
             await ensureGitignoreHasSkills();
@@ -7772,13 +7783,13 @@ function activate(context) {
                 vscode.window.showWarningMessage(`Impossible de créer CHANGELOG.md: ${error}`);
             }
         }
-        const symlinkStatus = symlinkCreated
-            ? "Lien symbolique '.agent' créé"
-            : symlinkUpdated
-                ? "Lien symbolique '.agent' mis à jour"
-                : symlinkSkipped
-                    ? "Dossier '.agent' local conservé (pas de symlink)"
-                    : "Lien symbolique '.agent' déjà présent";
+        const stateLabel = {
+            created: "créé",
+            updated: "mis à jour",
+            exists: "déjà présent",
+            skipped: "dossier local conservé (pas de symlink)"
+        };
+        const symlinkStatus = `Lien '.agent' ${stateLabel[agentSymlinkState]}, lien '.inspi' ${stateLabel[inspiSymlinkState]}`;
         const extraParts = [];
         if (agentFilesLinked)
             extraParts.push("fichiers AGENT/LLM linkés");

@@ -6,7 +6,7 @@ Toutes les modifications notables de **VS_pkvsconf** sont documentées ici.
 
 ## TODO — Roadmap
 
-Statut : `2.2026.34`
+Statut : `2.2026.35`
 
 ### Feature 1 — Add to .gitignore ✅
 - [x] Commande « ⛔ Ajouter au .gitignore » au clic droit explorer
@@ -70,6 +70,10 @@ Statut : `2.2026.34`
 ---
 
 ## Releases
+
+### [2.2026.35] - 2026-09-02
+#### Added
+- 🔗 Le bouton `Agent Skills` crée maintenant aussi le symlink `.inspi` → `~/Documents/GitHub/-inspi` (librairie d'inspiration design, fichiers HTML). Dossier cible créé au besoin, `.inspi` ajouté au `.gitignore`, statut final détaillé pour les deux liens.
 
 ### [2.2026.34] - 2026-08-30
 #### Fixed
